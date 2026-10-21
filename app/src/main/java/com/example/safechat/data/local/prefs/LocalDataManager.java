@@ -77,6 +77,22 @@ public class LocalDataManager {
         return securePrefs.getString(Constants.KEY_FULL_NAME, "");
     }
 
+    public void setFullName(String fullName) {
+        securePrefs.edit()
+                .putString(Constants.KEY_FULL_NAME, fullName)
+                .apply();
+    }
+
+    public String getAvatarUrl() {
+        return securePrefs.getString(Constants.KEY_AVATAR_URL, null);
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        securePrefs.edit()
+                .putString(Constants.KEY_AVATAR_URL, avatarUrl)
+                .apply();
+    }
+
     public byte[] getX25519PrivateKey() {
         String base64 = securePrefs.getString(Constants.KEY_X25519_PRIVATE, null);
         return base64 != null ? CryptoManager.fromBase64(base64) : null;

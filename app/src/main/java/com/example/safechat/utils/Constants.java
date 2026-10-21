@@ -12,6 +12,7 @@ public final class Constants {
     public static final String KEY_UID = "user_uid";
     public static final String KEY_EMAIL = "user_email";
     public static final String KEY_FULL_NAME = "user_full_name";
+    public static final String KEY_AVATAR_URL = "user_avatar_url";
     public static final String KEY_X25519_PRIVATE = "x25519_private_key";
     public static final String KEY_ED25519_PRIVATE = "ed25519_private_key";
 }

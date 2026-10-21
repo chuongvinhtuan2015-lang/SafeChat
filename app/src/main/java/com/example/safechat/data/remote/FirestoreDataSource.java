@@ -30,4 +30,17 @@ public class FirestoreDataSource {
                 .document(uid)
                 .get();
     }
+
+
+    public Task<Void> updateFullName(String uid, String fullName) {
+        return db.collection(Constants.COLLECTION_USERS)
+                .document(uid)
+                .update("fullName", fullName);
+    }
+
+    public Task<Void> updateAvatarUrl(String uid, String avatarUrl) {
+        return db.collection(Constants.COLLECTION_USERS)
+                .document(uid)
+                .update("avatarUrl", avatarUrl);
+    }
 }
