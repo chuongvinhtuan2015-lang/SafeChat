@@ -1,0 +1,106 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="#2563EB">
+
+    <!-- Cụm Logo + Tên thương hiệu + Slogan ở giữa màn hình -->
+    <LinearLayout
+        android:id="@+id/layoutCenterContent"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toTopOf="@id/layoutBottomProgress"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent"
+        app:layout_constraintVertical_chainStyle="spread_inside">
+
+        <!-- Logo Icon & Chữ SafeChat -->
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <!-- Khung bo tròn mờ của Icon -->
+            <androidx.cardview.widget.CardView
+                android:layout_width="64dp"
+                android:layout_height="64dp"
+                app:cardBackgroundColor="#40FFFFFF"
+                app:cardCornerRadius="18dp"
+                app:cardElevation="0dp"
+                app:strokeColor="#50FFFFFF"
+                app:strokeWidth="1dp">
+
+                <ImageView
+                    android:id="@+id/ivShield"
+                    android:layout_width="29dp"
+                    android:layout_height="29dp"
+                    android:layout_gravity="center"
+                    android:src="@drawable/ic_shield_check"
+                    app:tint="#FFFFFF" />
+            </androidx.cardview.widget.CardView>
+
+            <!-- Tên ứng dụng SafeChat -->
+            <TextView
+                android:id="@+id/tvAppName"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="16dp"
+                android:text="SafeChat"
+                android:textColor="#FFFFFF"
+                android:textSize="38sp"
+                android:textStyle="bold" />
+        </LinearLayout>
+
+        <!-- Slogan phụ -->
+        <TextView
+            android:id="@+id/tvSubSlogan"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="20dp"
+            android:text="Trò chuyện riêng tư, an toàn"
+            android:textColor="#E0E7FF"
+            android:textSize="17sp" />
+    </LinearLayout>
+
+    <!-- Cụm Thanh tiến trình (Loading Indicator) & Thông điệp bảo vệ ở chân màn hình -->
+    <LinearLayout
+        android:id="@+id/layoutBottomProgress"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="48dp"
+        android:gravity="center"
+        android:orientation="vertical"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="parent">
+
+        <!-- Thanh loading dạng progress bar -->
+        <ProgressBar
+            android:id="@+id/progressBar"
+            style="?android:attr/progressBarStyleHorizontal"
+            android:layout_width="120dp"
+            android:layout_height="4dp"
+            android:max="100"
+            android:progress="0"
+            android:progressBackgroundTint="#4B7BFF"
+            android:progressTint="#FFFFFF" />
+
+        <!-- Dòng chú thích dưới loading bar -->
+        <TextView
+            android:id="@+id/tvFooterNote"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="Bảo vệ mọi cuộc trò chuyện"
+            android:textColor="#C7D2FE"
+            android:textSize="13sp" />
+    </LinearLayout>
+
+</androidx.constraintlayout.widget.ConstraintLayout>

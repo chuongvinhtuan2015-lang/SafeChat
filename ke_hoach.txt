@@ -1,0 +1,296 @@
+====================================================================================================
+            KẾ HOẠCH TỔNG THỂ PHÁT TRIỂN & HOÀN THIỆN ỨNG DỤNG SAFETCHAT (E2EE MESSENGER)
+====================================================================================================
+Dự án: SafeChat - Ứng dụng trò chuyện bảo mật mã hóa đầu cuối (End-to-End Encryption)
+Ngôn ngữ: Java (Android Native SDK)
+Mô hình kiến trúc: MVVM + Repository Pattern (Tối ưu kết hợp Local DB & Server Cloud)
+Hệ mật mã cốt lõi:
+  • X25519: Trao đổi khóa bí mật dùng chung (Diffie-Hellman Key Agreement)
+  • Ed25519: Chữ ký điện tử xác thực danh tính & tính toàn vẹn (Digital Signatures)
+  • AES-256-GCM: Mã hóa đối xứng có xác thực (Authenticated Symmetric Encryption)
+  • Sender Key Protocol: Mã hóa tin nhắn nhóm chuẩn Signal Protocol
+Hệ cơ sở dữ liệu (Dual Database):
+  • Local DB: SQLite / Room Database + EncryptedSharedPreferences (bộ nhớ tạm bảo vệ Private Keys)
+  • Server DB: Firebase (Authentication, Cloud Firestore, Cloud Storage)
+Truyền tải đa phương tiện: Nén ảnh thông minh, file PDF, Word (.docx), TXT, Video ngắn nhẹ
+
+====================================================================================================
+                        TỔNG QUAN LỘ TRÌNH 7 GIAI ĐOẠN (ROADMAP)
+====================================================================================================
+Giai đoạn 1: Nền tảng Mật mã, Lưu trữ Cục bộ & Xác thực Tài khoản (Zero-Knowledge Auth)
+Giai đoạn 2: Quản lý Hồ sơ Cá nhân, Cập nhật Avatar & Đăng xuất An toàn
+Giai đoạn 3: Hệ thống Bạn bè, Tìm kiếm, Lời mời Kết bạn & Trao đổi Khóa Ban đầu
+Giai đoạn 4: Trò chuyện 1-1 Mã hóa Đầu cuối (E2EE 1-1) & Cơ chế Xoay khóa (Key Ratchet / Rotation)
+Giai đoạn 5: Chat Nhóm Bảo mật bằng Giao thức Sender Key (Group E2EE & Group Key Rotation)
+Giai đoạn 6: Xử lý Đa phương tiện nhẹ (Nén ảnh, PDF, Word, TXT, Video nhẹ)
+Giai đoạn 7: Kiểm thử Mật mã, Bảo mật chống Dịch ngược & Đóng gói Hoàn thiện
+
+====================================================================================================
+                                 CHI TIẾT TỪNG GIAI ĐOẠN
+====================================================================================================
+
+----------------------------------------------------------------------------------------------------
+GIAI ĐOẠN 1: NỀN TẢNG MẬT MÃ, KHO LƯU TRỮ VÀ XÁC THỰC AN TOÀN (ZERO-KNOWLEDGE AUTH)
+----------------------------------------------------------------------------------------------------
+Mục tiêu cốt lõi:
+Xây dựng khung mật mã hoàn chỉnh (sinh cặp khóa X25519, Ed25519, đóng/mở gói khóa bằng AES-GCM với
+mã khôi phục), thiết lập kết nối Firebase, quản lý dữ liệu phiên người dùng và kết nối 3 màn hình
+khởi đầu (Chờ -> Đăng nhập / Đăng ký -> Màn hình chính điều hướng).
+
+[CÁC BƯỚC THỰC HIỆN CỤ THỂ]
+1. Cấu hình thư viện dự án (app/build.gradle.kts):
+   - Thêm Google Services Plugin.
+   - Thêm Firebase BoM (Firebase Auth, Cloud Firestore, Firebase Storage).
+   - Thêm thư viện Mật mã hỗ trợ X25519 và Ed25519 (Bouncy Castle: `bcprov-jdk15to18` hoặc Tink).
+   - Thêm AndroidX Security Crypto (`androidx.security:security-crypto`) để mã hóa SharedPreferences.
+
+2. Xây dựng 1 File Mật mã cốt lõi: `CryptoManager.java`
+   - Vị trí: `com.example.safechat.crypto.CryptoManager`
+   - Nhiệm vụ:
+     + `generateX25519KeyPair()`: Sinh cặp khóa (PublicKey, PrivateKey) X25519 phục vụ trao đổi khóa ECDH.
+     + `generateEd25519KeyPair()`: Sinh cặp khóa (PublicKey, PrivateKey) Ed25519 phục vụ ký & xác thực.
+     + `deriveKeyFromRecoveryCode(String recoveryCode, byte[] salt)`: Dùng PBKDF2WithHmacSHA256 (hoặc Argon2) để biến mã khôi phục của người dùng thành khóa đối xứng AES-256 bit an toàn.
+     + `encryptKeyBundle(byte[] x25519Priv, byte[] ed25519Priv, String recoveryCode)`:
+       * Gom 2 khóa bí mật lại thành gói nhị phân (Key Bundle).
+       * Sinh Salt (16 bytes) và IV/Nonce ngẫu nhiên (12 bytes).
+       * Dùng khóa dẫn xuất từ mã khôi phục để mã hóa gói khóa bằng AES-256-GCM.
+       * Trả về chuỗi Base64 chứa: [Salt + IV + Ciphertext + AuthTag].
+     + `decryptKeyBundle(String encryptedBundleBase64, String recoveryCode)`:
+       * Tách Salt, IV, Ciphertext.
+       * Dẫn xuất khóa từ mã khôi phục.
+       * Dùng AES-256-GCM bóc tách và giải mã ra đúng 2 khóa bí mật (X25519 PrivateKey & Ed25519 PrivateKey).
+       * Trả về lỗi nếu mã khôi phục sai (GCM Tag Verification Failed - Zero Knowledge).
+
+3. Xây dựng 1 File Dữ liệu / Phiên đăng nhập: `LocalDataManager.java`
+   - Vị trí: `com.example.safechat.data.LocalDataManager`
+   - Nhiệm vụ:
+     + Quản lý phiên làm việc (`SessionManager`): Lưu trữ UID, Email, Tên hiển thị người dùng.
+     + Lưu trữ an toàn các Khóa riêng tư (Private Keys) hiện hành trong `EncryptedSharedPreferences` (chỉ tồn tại khi người dùng đang đăng nhập trên thiết bị).
+     + Lưu trữ Public Key của bản thân và cache Public Key của bạn bè.
+     + Cung cấp hàm kiểm tra nhanh: `isUserLoggedIn()`, `hasValidKeyLoaded()`, `clearSession()`.
+
+4. Xây dựng 3 File Code Java về Màn hình:
+   a. `ChoActivity.java` (Gắn layout `cho.xml` - Splash Screen):
+      - Cài đặt `progressBar` chạy animation/tiến trình khoảng 1.5 giây.
+      - Kiểm tra phiên làm việc:
+        * Nếu `FirebaseAuth.getInstance().getCurrentUser() != null` VÀ có khóa bí mật hợp lệ trong `LocalDataManager` -> Tự động chuyển thẳng vào `ChungActivity.java`.
+        * Ngược lại -> Chuyển vào `DangNhapActivity.java`.
+      - Kết thúc Activity (gọi `finish()`).
+
+   b. `DangKyActivity.java` (Gắn layout `dangky.xml` - Register):
+      - Bắt sự kiện các view: `btnBack`, `etFullName`, `etEmail`, `etPassword`, `etConfirmPassword`, `etRecoveryCode`, `etConfirmRecoveryCode`, `btnRegister`, `tvLogin`.
+      - Khi bấm `btnRegister`:
+        * Validate tính hợp lệ: Email chuẩn, Mật khẩu >= 8 ký tự và trùng khớp, Mã khôi phục trùng khớp.
+        * Gọi `FirebaseAuth.createUserWithEmailAndPassword(email, password)`.
+        * Gọi `CryptoManager` sinh 2 cặp khóa: Cặp khóa X25519 và Cặp khóa Ed25519.
+        * Dùng mã khôi phục đóng gói 2 khóa bí mật bằng AES-256-GCM thành `encryptedKeyBundle`.
+        * Lưu thông tin người dùng lên Firestore (Collection `users/{uid}`):
+          {
+            "uid": uid,
+            "fullName": fullName,
+            "email": email,
+            "publicKeyX25519": Base64(pubX),
+            "publicKeyEd25519": Base64(pubEd),
+            "encryptedKeyBundle": encryptedKeyBundle,
+            "createdAt": timestamp
+          }
+        * Lưu Private Keys vào `LocalDataManager` trên máy.
+        * Chuyển hướng trực tiếp vào `ChungActivity.java`.
+
+   c. `DangNhapActivity.java` (Gắn layout `dangnhap.xml` - Login):
+      - Bắt sự kiện các view: `etEmail`, `etPassword`, `etRecoveryCode`, `btnLogin`, `tvForgotPassword`, `tvRegister`.
+      - Khi bấm `btnLogin`:
+        * Kiểm tra không để trống email, password, mã khôi phục.
+        * Gọi `FirebaseAuth.signInWithEmailAndPassword(email, password)`.
+        * Đăng nhập thành công -> Đọc document `users/{uid}` từ Firestore để lấy chuỗi `encryptedKeyBundle`.
+        * Gọi `CryptoManager.decryptKeyBundle(encryptedKeyBundle, recoveryCode)`:
+          - Nếu giải mã thành công: Trích xuất được Private Keys X25519 và Ed25519 -> Lưu vào `LocalDataManager` -> Mở `ChungActivity.java`.
+          - Nếu giải mã thất bại (sai mã khôi phục): Báo lỗi "Mã khôi phục không chính xác, không thể mở khóa dữ liệu bảo mật!".
+
+5. Cập nhật `ChungActivity.java` (Màn hình chính sơ khai):
+   - Gắn layout `chung.xml`.
+   - Hiển thị tên người dùng lên `tvAdminName`.
+   - Điều hướng cơ bản (sẵn sàng cho các giai đoạn tiếp theo).
+
+[KẾT QUẢ ĐẠT ĐƯỢC SAU GIAI ĐOẠN 1]
+- Người dùng tạo tài khoản an toàn với mô hình Zero-Knowledge: Server Firebase hoàn toàn không biết Private Key hay Mã khôi phục của người dùng.
+- Khôi phục tài khoản thành công trên thiết bị mới bằng Email + Mật khẩu + Mã khôi phục.
+- Luồng mở ứng dụng, kiểm tra trạng thái mượt mà.
+
+
+----------------------------------------------------------------------------------------------------
+GIAI ĐOẠN 2: QUẢN LÝ HỒ SƠ CÁ NHÂN, CẬP NHẬT AVATAR & ĐĂNG XUẤT AN TOÀN
+----------------------------------------------------------------------------------------------------
+Mục tiêu cốt lõi:
+Hoàn thiện màn hình Trang cá nhân `profile.xml`, cập nhật hồ sơ, đổi ảnh đại diện và xử lý cơ chế đăng xuất an toàn
+xóa sạch khóa nhạy cảm trên thiết bị ngay sau khi hoàn thành luồng xác thực Giai đoạn 1.
+
+[CÁC BƯỚC THỰC HIỆN CỤ THỂ]
+1. `ProfileActivity.java` (Gắn layout `profile.xml`):
+   - Hiển thị thông tin: Họ tên (`etFullName`), Email (`tvUserSubInfo`), Avatar hiện tại (`ivProfileAvatar` / `tvAvatarChar`).
+   - Đổi ảnh đại diện:
+     * Bấm `btnChangeAvatar` -> Chọn ảnh từ thư viện -> Nén ảnh tròn -> Tải lên Firebase Storage -> Cập nhật trường `avatarUrl` trong `users/{uid}`.
+   - Đổi họ tên:
+     * Bấm `btnSaveProfile` -> Cập nhật `fullName` lên Firestore -> Cập nhật Local Cache -> Báo Toast thành công.
+2. Đăng xuất an toàn (`btnLogout`):
+   - Xóa toàn bộ Private Keys trong bộ nhớ RAM và `EncryptedSharedPreferences`.
+   - Gọi `FirebaseAuth.getInstance().signOut()`.
+   - Chuyển hướng người dùng về `DangNhapActivity.java` với các cờ `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK` để xóa sạch backstack, ngăn người dùng bấm nút Back quay lại ứng dụng.
+3. Liên kết từ Màn hình chính (`ChungActivity.java`):
+   - Bấm `btnProfile` ở header -> Mở `ProfileActivity.java`.
+
+
+----------------------------------------------------------------------------------------------------
+GIAI ĐOẠN 3: HỆ THỐNG BẠN BÈ, TÌM KIẾM, LỜI MỜI KẾT BẠN & TRAO ĐỔI KHÓA BAN ĐẦU
+----------------------------------------------------------------------------------------------------
+Mục tiêu cốt lõi:
+Xây dựng mạng lưới kết nối: tìm kiếm bạn bè, gửi/nhận lời mời kết bạn, lưu trữ Public Key (X25519 & Ed25519)
+của bạn bè về Local DB để làm tiền đề thiết lập phiên mã hóa trò chuyện.
+
+[CÁC BƯỚC THỰC HIỆN CỤ THỂ]
+1. Quản lý quan hệ bạn bè trên Firestore:
+   - Collection `friend_requests`: `{requestId, senderId, senderName, receiverId, status: "PENDING"|"ACCEPTED"|"DECLINED", timestamp}`.
+   - Collection `friends`: Lưu danh sách UID bạn bè 2 chiều kèm thông tin Public Keys.
+2. Màn hình `FriendsActivity` (Gắn layout `friends.xml` & `item_friend.xml`):
+   - Bấm `btnAddFriend`: Hiển thị Dialog tìm kiếm người dùng theo Email -> Tìm trên Firestore -> Nếu tìm thấy và chưa kết bạn -> Bấm "Gửi lời mời kết bạn".
+   - Lắng nghe lời mời kết bạn gửi đến: Hiển thị card `cardFriendRequest` với tên người gửi `tvReqName`.
+   - Nút `btnAccept`: Chấp nhận lời mời -> Lưu vào danh sách bạn bè 2 bên -> Tải Public Keys (X25519 & Ed25519) của bạn bè về lưu vào bảng `friends` trong Local DB.
+   - Nút `btnDecline`: Từ chối / Hủy lời mời.
+   - Nút `btnDeleteFriend` (ở `item_friend.xml`): Xác nhận và xóa bạn bè khỏi danh bạ (đồng thời hủy phiên mã hóa cũ nếu có).
+   - Nút `btnMessageDirect`: Lấy partnerId (đã có sẵn khóa công khai) -> Mở thẳng `ChatActivity` để bắt đầu trò chuyện.
+3. Chuyển đổi qua lại giữa 2 Tab ở Bottom Navigation (`tabMessages` <-> `tabFriends`).
+
+
+----------------------------------------------------------------------------------------------------
+GIAI ĐOẠN 4: CHAT 1-1 MÃ HÓA ĐẦU CUỐI (E2EE 1-1) & CƠ CHẾ XOAY KHÓA (KEY ROTATION / RATCHET)
+----------------------------------------------------------------------------------------------------
+Mục tiêu cốt lõi:
+Thiết lập cơ chế mã hóa đầu cuối 1-1 giữa 2 người bạn qua X25519 (ECDH) + AES-256-GCM + chữ ký Ed25519,
+tích hợp cơ chế XOAY KHÓA (Key Ratchet / Rotation) để đảm bảo Forward Secrecy & Break-in Recovery,
+lưu trữ tin nhắn đã giải mã ở Local Database và đồng bộ qua Firestore.
+
+[CƠ CHẾ XOAY KHÓA (KEY ROTATION / RATCHETING) TRONG CHAT 1-1]
+1. Nguyên lý Xoay khóa (Forward Secrecy):
+   - Không dùng 1 khóa duy nhất cho toàn bộ cuộc trò chuyện.
+   - Sau mỗi N tin nhắn (hoặc theo mỗi lượt trao đổi Diffie-Hellman - DH Ratchet), một cặp khóa Ephemeral X25519 mới được tạo ra để xoay khóa phiên (`sessionKey`).
+   - KDF Chain Ratchet: Khóa chuỗi (Chain Key) liên tục "bước tiến" một chiều qua hàm HMAC-SHA256 để sinh ra Message Key riêng cho từng tin nhắn. Ngay sau khi mã hóa/giải mã, Message Key bị xóa khỏi bộ nhớ -> Kẻ tấn công có lộ khóa hiện tại cũng không thể giải mã tin nhắn trong quá khứ.
+2. Trao đổi khóa ban đầu & Thiết lập phiên:
+   - Alice lấy `publicKeyX25519` của Bob từ Local DB (đã có từ Giai đoạn 3).
+   - Alice tính toán X25519(Alice_PrivateKey, Bob_PublicKey) để tạo ra Root Key ban đầu.
+3. Gửi & Nhận tin nhắn có Xoay khóa:
+   - Gửi: Dẫn xuất Message Key tiếp theo từ Ratchet -> Mã hóa tin nhắn bằng AES-256-GCM -> Ký chữ ký điện tử Ed25519 -> Đẩy payload `{ciphertext, iv, signature, senderId, keyIndex, ephemeralPublicKey, timestamp}` lên Firestore `chats/{chatId}/messages`.
+   - Nhận: Kiểm tra chữ ký Ed25519 -> Xoay Ratchet tương ứng để lấy Message Key -> Giải mã AES-GCM -> Lưu tin nhắn đã giải mã vào Local DB.
+4. Xây dựng Local Database (Room / SQLite):
+   - Bảng `conversations`: conversationId, partnerId, partnerName, lastMessage, lastTimestamp, unreadCount.
+   - Bảng `messages`: messageId, conversationId, senderId, receiverId, messageText (đã giải mã), timestamp, isSentByMe, status (SENT, DELIVERED, READ).
+   - Bảng `ratchet_sessions`: conversationId, rootKey, sendChainKey, recvChainKey, currentKeyIndex.
+5. Gắn kết giao diện:
+   - `ChungActivity`: Load danh sách đoạn chat từ Local DB lên `rvChatList` dùng `item_chung.xml`.
+   - `ChatActivity`: Hiển thị tin nhắn gửi (`item_message_sent.xml`) và tin nhắn nhận (`item_message_received.xml`), tự động scroll xuống đáy.
+
+
+----------------------------------------------------------------------------------------------------
+GIAI ĐOẠN 5: CHAT NHÓM BẢO MẬT BẰNG GIAO THỨC SENDER KEY (GROUP E2EE)
+----------------------------------------------------------------------------------------------------
+Mục tiêu cốt lõi:
+Triển khai thuật toán Sender Key Protocol cho chat nhóm, giúp gửi tin nhắn nhóm mã hóa E2EE hiệu năng cao
+mà không cần mã hóa N lần cho N thành viên.
+
+[NGUYÊN LÝ HOẠT ĐỘNG CỦA SENDER KEY PROTOCOL TRONG SAFETCHAT]
+1. Khởi tạo Sender Key:
+   - Mỗi thành viên trong nhóm tự tạo 1 cặp Sender Key riêng gồm:
+     * `ChainKey` (32 bytes ngẫu nhiên) dùng để sinh ra Message Key (AES-256) cho mỗi tin nhắn qua hàm KDF HMAC-SHA256.
+     * `SenderSigningKey` (Cặp khóa Ed25519) dùng để ký lên mọi tin nhắn nhóm do người đó gửi.
+2. Phân phối Sender Key (Sender Key Distribution):
+   - Khi Alice vào nhóm hoặc gửi tin nhắn đầu tiên, Alice đóng gói `SenderKeyDistributionMessage` (chứa ChainKey và Signing PublicKey của Alice).
+   - Alice mã hóa gói này bằng mã hóa E2EE 1-1 (Giai đoạn 4) và gửi riêng đến từng thành viên khác trong nhóm.
+   - Các thành viên khác lưu Sender Key của Alice vào kho lưu trữ an toàn trong Local DB.
+3. Gửi tin nhắn nhóm:
+   - Khi Alice gửi 1 tin nhắn vào nhóm:
+     * Alice dùng ChainKey của mình sinh Message Key -> Mã hóa tin nhắn bằng AES-256-GCM.
+     * Alice ký chữ ký điện tử Ed25519 lên ciphertext.
+     * Alice đẩy duy nhất 1 bản tin lên Firestore: `groups/{groupId}/messages/{messageId}`.
+     * Alice cập nhật ChainKey bước tiếp theo (KDF Ratchet - Forward Secrecy).
+4. Nhận tin nhắn nhóm:
+   - Bob nhận bản tin từ Alice: Bob tra cứu Sender Key của Alice trong Local DB.
+   - Bob kiểm tra chữ ký số Ed25519 của Alice -> Dẫn xuất Message Key -> Giải mã tin nhắn -> Hiển thị lên `chat_group.xml` với `tvSenderMemberName` hiển thị tên người gửi.
+5. Cập nhật nhóm & Xoay khóa (Key Rotation):
+   - Khi một thành viên bị xóa khỏi nhóm hoặc rời nhóm: Tất cả thành viên còn lại lập tức hủy bỏ Sender Key cũ và sinh Sender Key mới để thành viên cũ không thể giải mã các tin nhắn trong tương lai (Post-Compromise Security).
+6. Hoàn thiện code màn hình:
+   - `CreateGroupActivity.java` (`create_group.xml`): Nhập tên nhóm, chọn danh sách thành viên từ danh bạ bạn bè, khởi tạo nhóm trên Firestore.
+   - `GroupChatActivity.java` (`chat_group.xml`): Hiển thị tin nhắn nhóm, tên thành viên gửi, thông tin số lượng thành viên `tvMemberCount`.
+
+
+----------------------------------------------------------------------------------------------------
+GIAI ĐOẠN 6: XỬ LÝ ĐA PHƯƠNG TIỆN NHẸ (NÉN ẢNH, PDF, WORD, TXT, VIDEO NHẸ)
+----------------------------------------------------------------------------------------------------
+Mục tiêu cốt lõi:
+Hỗ trợ gửi nhận tệp tin an toàn (mã hóa file trước khi gửi) với dung lượng tối ưu, tiết kiệm băng thông
+và dung lượng máy.
+
+[CÁC BƯỚC THỰC HIỆN CỤ THỂ]
+1. Xử lý Ảnh (Image Compression):
+   - Sử dụng thư viện nén ảnh Bitmap nén sang WebP / JPEG (chất lượng 75-80%, giới hạn kích thước tối đa 1280x1280).
+   - Dung lượng ảnh sau nén chỉ còn khoảng 100KB - 300KB nhưng vẫn giữ độ nét cao.
+2. Xử lý Tài liệu Văn bản (PDF, Word .docx, TXT):
+   - Đọc tệp từ Uri người dùng chọn qua FilePicker.
+   - Kiểm tra dung lượng tệp (giới hạn < 15MB để đảm bảo nhẹ và nhanh).
+   - Lấy tên tệp, dung lượng (bytes), đuôi mở rộng.
+3. Xử lý Video Ngắn:
+   - Giới hạn thời lượng video (dưới 60 giây) hoặc dung lượng (< 15MB).
+   - Trích xuất ảnh bìa thu nhỏ (thumbnail bitmap) và nén thumbnail gửi kèm.
+4. Quy trình Mã hóa & Truyền tải File E2EE:
+   - Bước 1: Tạo ngẫu nhiên 1 FileKey đối xứng (AES-256-GCM) + IV.
+   - Bước 2: Mã hóa luồng byte của file bằng FileKey -> Thu được `EncryptedFileBytes`.
+   - Bước 3: Upload `EncryptedFileBytes` lên Firebase Storage -> Nhận về `downloadUrl`.
+   - Bước 4: Mã hóa `FileKey` bằng kênh E2EE (1-1 hoặc Sender Key nhóm).
+   - Bước 5: Gửi tin nhắn chứa `{downloadUrl, encryptedFileKey, fileName, fileSize, fileType, thumbnail}`.
+   - Bước 6 (Người nhận): Tải file mã hóa về -> Giải mã FileKey -> Dùng FileKey giải mã ra file gốc -> Mở hoặc lưu vào bộ nhớ trong.
+
+
+----------------------------------------------------------------------------------------------------
+GIAI ĐOẠN 7: KIỂM THỬ MẬT MÃ, BẢO MẬT CHỐNG DỊCH NGƯỢC & ĐÓNG GÓI HOÀN THIỆN
+----------------------------------------------------------------------------------------------------
+Mục tiêu cốt lõi:
+Kiểm thử toàn diện các tính năng, đánh giá an toàn mật mã, cấu hình bảo vệ code và tối ưu hóa ứng dụng.
+
+[CÁC BƯỚC THỰC HIỆN CỤ THỂ]
+1. Kiểm thử Mật mã (Crypto Testing):
+   - Unit test kiểm tra tính chính xác của X25519 Key Agreement, Ed25519 Sign/Verify, AES-256-GCM Encrypt/Decrypt.
+   - Kiểm tra khả năng chống giả mạo: Thay đổi 1 bit ciphertext -> Giải mã phải lập tức ném ngoại lệ xác thực (Authentication Failure).
+   - Kiểm tra quy trình đóng gói & phục hồi bằng mã khôi phục.
+2. Kiểm thử Tính năng & Ngoại tuyến (Offline Handling):
+   - Kiểm tra nhắn tin khi mất mạng -> Tin nhắn lưu Local DB ở trạng thái PENDING -> Tự động đồng bộ lên Server khi có mạng trở lại.
+3. Bảo mật & Chống dịch ngược (ProGuard / R8 Rules):
+   - Cấu hình file `proguard-rules.pro` để bảo vệ các lớp mật mã, obfuscate code Java, ngăn dịch ngược logic giải mã.
+4. Đóng gói file APK hoàn chỉnh.
+
+====================================================================================================
+               KẾ HOẠCH BẮT ĐẦU NGAY: CHECKLIST CHI TIẾT CHO GIAI ĐOẠN 1
+====================================================================================================
+Để tiến hành code Giai đoạn 1 ngay lập tức theo đúng yêu cầu của bạn, các file cần tạo/chỉnh sửa gồm:
+
+1. [Cấu hình Dependencies] `app/build.gradle.kts`
+   - Bổ sung Firebase Auth, Firestore, Storage.
+   - Bổ sung thư viện Mật mã Bouncy Castle (`org.bouncycastle:bcprov-jdk15to18`) hoặc Google Tink.
+   - Bổ sung AndroidX Security Crypto.
+
+2. [File Mật mã] `CryptoManager.java`
+   - Phương thức sinh khóa X25519 và Ed25519.
+   - Phương thức băm/dẫn xuất PBKDF2 từ Mã khôi phục.
+   - Phương thức đóng gói khóa riêng tư bằng AES-256-GCM.
+   - Phương thức mở gói/giải mã khóa riêng tư bằng Mã khôi phục.
+
+3. [File Data / Session] `LocalDataManager.java`
+   - Quản lý trạng thái đăng nhập, UID, Email, Tên.
+   - Lưu trữ an toàn Private Keys trên máy bằng EncryptedSharedPreferences.
+
+4. [3 File Màn hình Java]
+   - `ChoActivity.java` (gắn `cho.xml`): ProgressBar delay 1.5s -> Điều hướng thông minh (chưa đăng nhập vào DangNhapActivity, đã đăng nhập vào ChungActivity).
+   - `DangKyActivity.java` (gắn `dangky.xml`): Tạo acc Firebase Auth -> Sinh 2 cặp khóa (X25519, Ed25519) -> Đóng gói Private Keys bằng Mã khôi phục với AES-GCM -> Đẩy Public Keys và gói khóa lên Firestore -> Lưu session -> Vào ChungActivity.
+   - `DangNhapActivity.java` (gắn `dangnhap.xml`): Đăng nhập Firebase Auth -> Kéo gói khóa từ Firestore -> Giải mã lấy Private Keys bằng Mã khôi phục -> Lưu session -> Vào ChungActivity.
+
+5. [Màn hình Chính điều hướng] `ChungActivity.java`
+   - Gắn `chung.xml`, hiển thị tên người dùng và sẵn sàng điều hướng.
+
+====================================================================================================

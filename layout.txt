@@ -1,0 +1,606 @@
+====================================================================================================
+                        SAFECHAT - BẢNG ĐẶC TẢ ID LAYOUT & HƯỚNG DẪN CODE DÀNH CHO AI VIBE
+====================================================================================================
+Mục đích: File này tổng hợp chi tiết tất cả các màn hình (layouts) của ứng dụng SafeChat, kèm theo:
+- Tên file layout XML tương ứng
+- Danh sách đầy đủ ID của các View, Type (kiểu View) và vai trò chức năng
+- Sự kiện (Events) & Logic cần code (Binding, OnClickListener, TextWatcher, RecyclerView Adapters,...)
+- Hướng dẫn điều hướng luồng màn hình (Navigation Flow) giúp AI vibe code cực nhanh và chính xác!
+
+====================================================================================================
+MỤC LỤC CÁC MÀN HÌNH & COMPONENT:
+1.  cho.xml                     - Màn hình chờ / Khởi động (Splash Screen)
+2.  dangnhap.xml                - Màn hình Đăng nhập (Sign In)
+3.  dangky.xml                  - Màn hình Đăng ký tài khoản (Sign Up)
+4.  chung.xml                   - Màn hình chính / Danh sách trò chuyện (Chats List / Home)
+5.  item_chung.xml              - Item cuộc trò chuyện cho RecyclerView ở màn hình chung
+6.  chat.xml                    - Màn hình Chat 1 - 1 (Direct Message)
+7.  chat_group.xml              - Màn hình Chat Nhóm (Group Chat)
+8.  item_message_sent.xml       - Item tin nhắn gửi đi (Sent Message Bubble)
+9.  item_message_received.xml   - Item tin nhắn nhận được (Received Message Bubble)
+10. friends.xml                 - Màn hình Bạn bè & Lời mời kết bạn (Friends & Requests)
+11. item_friend.xml             - Item bạn bè cho RecyclerView ở màn hình friends
+12. create_group.xml            - Màn hình Tạo nhóm chat mới (Create Group)
+13. profile.xml                 - Màn hình Trang cá nhân & Đăng xuất (Profile / Account)
+14. activity_main.xml           - Layout MainActivity mặc định
+====================================================================================================
+
+----------------------------------------------------------------------------------------------------
+1. FILE LAYOUT: cho.xml
+Tên màn hình: Màn hình Chờ / Giới thiệu ứng dụng (Splash Screen)
+Activity/Fragment gợi ý: SplashActivity.java / SplashScreenActivity.kt
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: progressBar
+  - Kiểu View: ProgressBar
+  - Chức năng: Thanh tiến trình loading dạng ngang (horizontal progress bar).
+  - Logic code:
+    + Cập nhật tiến độ loading hoặc chạy animation Handler.postDelayed (khoảng 1.5s - 2s).
+    + Kiểm tra phiên đăng nhập (vd: FirebaseAuth.getInstance().getCurrentUser() / SharedPreferences / Token):
+      * Nếu đã đăng nhập -> Chuyển sang màn hình chính (chung.xml).
+      * Nếu chưa đăng nhập -> Chuyển sang màn hình Đăng nhập (dangnhap.xml).
+
+• ID: tvAppName (TextView) - Chữ "SafeChat"
+• ID: tvSubSlogan (TextView) - "Trò chuyện riêng tư, an toàn"
+• ID: tvFooterNote (TextView) - "Bảo vệ mọi cuộc trò chuyện"
+• ID: ivShield (ImageView) - Biểu tượng tấm khiên bảo mật
+
+
+----------------------------------------------------------------------------------------------------
+2. FILE LAYOUT: dangnhap.xml
+Tên màn hình: Màn hình Đăng nhập (Login / Sign In)
+Activity/Fragment gợi ý: LoginActivity.java / DangNhapActivity.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: tilEmail
+  - Kiểu View: com.google.android.material.textfield.TextInputLayout
+  - Chức năng: Khung bao input Email, dùng để hiển thị thông báo lỗi (tilEmail.setError("Email không hợp lệ")).
+
+• ID: etEmail
+  - Kiểu View: com.google.android.material.textfield.TextInputEditText
+  - Chức năng: Ô nhập địa chỉ Email người dùng.
+  - Logic code: Lấy dữ liệu etEmail.getText().toString().trim(), kiểm tra rỗng / định dạng regex email.
+
+• ID: tilPassword
+  - Kiểu View: com.google.android.material.textfield.TextInputLayout
+  - Chức năng: Khung bao mật khẩu, hỗ trợ icon ẩn/hiện mật khẩu và hiển thị lỗi.
+
+• ID: etPassword
+  - Kiểu View: com.google.android.material.textfield.TextInputEditText
+  - Chức năng: Ô nhập mật khẩu.
+  - Logic code: Lấy dữ liệu etPassword.getText().toString(), kiểm tra rỗng / độ dài tối thiểu.
+
+• ID: tilRecoveryCode
+  - Kiểu View: com.google.android.material.textfield.TextInputLayout
+  - Chức năng: Khung bao ô nhập Mã khôi phục (icon ic_key, có nút ẩn/hiện mật khẩu password_toggle).
+
+• ID: etRecoveryCode
+  - Kiểu View: com.google.android.material.textfield.TextInputEditText
+  - Chức năng: Ô nhập Mã khôi phục (Recovery Code) dạng mật khẩu (inputType="textPassword") khi cần khôi phục tài khoản hoặc xác thực 2 lớp.
+  - Logic code: Lấy etRecoveryCode.getText().toString().trim() để xác thực hoặc khôi phục quyền truy cập tài khoản.
+
+• ID: tvForgotPassword
+  - Kiểu View: TextView
+  - Chức năng: Nút "Quên mật khẩu?".
+  - Logic code: setOnClickListener -> Mở dialog hoặc gửi email reset mật khẩu (FirebaseAuth.sendPasswordResetEmail).
+
+• ID: btnLogin
+  - Kiểu View: com.google.android.material.button.MaterialButton
+  - Chức năng: Nút "Đăng nhập".
+  - Logic code: setOnClickListener -> Validate email/password (hoặc kết hợp mã khôi phục) -> Gọi API đăng nhập / FirebaseAuth.signInWithEmailAndPassword -> Thành công thì chuyển sang chung.xml (ChatsActivity).
+
+• ID: tvRegister
+  - Kiểu View: TextView
+  - Chức năng: Nút chuyển sang "Đăng ký".
+  - Logic code: setOnClickListener -> Intent chuyển sang màn hình Đăng ký (dangky.xml).
+
+
+----------------------------------------------------------------------------------------------------
+3. FILE LAYOUT: dangky.xml
+Tên màn hình: Màn hình Đăng ký tài khoản (Register / Sign Up)
+Activity/Fragment gợi ý: RegisterActivity.java / DangKyActivity.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: btnBack
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút mũi tên quay lại góc trên bên trái (đã tối ưu gọn khoảng trống phía trên).
+  - Logic code: setOnClickListener -> finish() hoặc quay lại màn hình Login.
+
+• ID: tvTitle
+  - Kiểu View: TextView
+  - Chức năng: Tiêu đề "Tạo tài khoản" (đã bỏ dòng phụ đề bên dưới để tối ưu khoảng trống, các trường nối liền nhau rất gọn gàng).
+
+• ID: tilFullName / etFullName
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập Họ và tên (vd: Nguyễn Văn An).
+  - Logic code: Kiểm tra không để trống khi submit.
+
+• ID: tilEmail / etEmail
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập địa chỉ Email đăng ký.
+
+• ID: tilPassword / etPassword
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập Mật khẩu (tối thiểu 8 ký tự, có icon ẩn/hiện).
+
+• ID: tilConfirmPassword / etConfirmPassword
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập Xác nhận mật khẩu (có icon ẩn/hiện).
+  - Logic code: Kiểm tra trùng khớp với etPassword trước khi submit.
+
+• ID: tilRecoveryCode / etRecoveryCode
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô thiết lập Mã khôi phục tài khoản (Recovery Code) khi đăng ký (icon ic_key, có nút ẩn/hiện mật khẩu password_toggle, inputType="textPassword").
+  - Logic code: Lấy mã khôi phục do người dùng nhập -> Kiểm tra độ an toàn.
+
+• ID: tilConfirmRecoveryCode / etConfirmRecoveryCode
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập Xác nhận mã khôi phục (icon ic_key, có nút ẩn/hiện mật khẩu password_toggle, inputType="textPassword").
+  - Logic code: Kiểm tra trùng khớp với etRecoveryCode trước khi submit.
+
+• ID: btnRegister
+  - Kiểu View: com.google.android.material.button.MaterialButton
+  - Chức năng: Nút "Tạo tài khoản".
+  - Logic code: setOnClickListener -> Validate tất cả các ô:
+    + Họ tên không rỗng.
+    + Email đúng định dạng.
+    + Mật khẩu & Xác nhận mật khẩu trùng khớp.
+    + Mã khôi phục & Xác nhận mã khôi phục trùng khớp.
+    + Gọi API tạo user / FirebaseAuth.createUserWithEmailAndPassword -> Lưu thông tin User (Tên, Email, Mã khôi phục băm, UID) vào Database -> Chuyển sang màn hình chính (chung.xml).
+
+• ID: tvLogin
+  - Kiểu View: TextView
+  - Chức năng: Nút "Đăng nhập" ở dòng chữ "Đã có tài khoản? Đăng nhập".
+  - Logic code: setOnClickListener -> finish() quay lại màn Đăng nhập.
+
+
+----------------------------------------------------------------------------------------------------
+4. FILE LAYOUT: chung.xml
+Tên màn hình: Màn hình Chính / Danh sách cuộc trò chuyện gần đây (Home / Chat List)
+Activity/Fragment gợi ý: MainActivity.java / HomeActivity.java / ChatsFragment.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: tvAdminName
+  - Kiểu View: TextView
+  - Chức năng: Hiển thị tên người dùng hiện tại ở header (vd: "Admin", "Hoàng", "Tuấn").
+  - Logic code: Gán dữ liệu tên user sau khi fetch từ User Profile.
+
+• ID: btnNotification
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút icon chuông thông báo ở góc trên bên phải.
+  - Logic code: setOnClickListener -> Mở màn hình hoặc Dialog thông báo mới.
+
+• ID: btnProfile
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút tròn Avatar người dùng góc trên bên phải.
+  - Logic code: setOnClickListener -> Mở màn hình Trang cá nhân (profile.xml).
+
+• ID: tvProfileChar
+  - Kiểu View: TextView
+  - Chức năng: Chữ cái đại diện trong avatar góc header (vd: "AD", "T").
+
+• ID: etSearch
+  - Kiểu View: EditText (trong layoutSearch)
+  - Chức năng: Ô tìm kiếm cuộc trò chuyện.
+  - Logic code: addTextChangedListener -> Lọc danh sách trò chuyện hiển thị trên rvChatList theo tên hoặc nội dung.
+
+• ID: rvChatList
+  - Kiểu View: androidx.recyclerview.widget.RecyclerView
+  - Chức năng: Danh sách các cuộc trò chuyện gần đây (hiển thị danh sách item_chung.xml).
+  - Logic code:
+    + Cài đặt LinearLayoutManager.
+    + Gắn ChatAdapter (sử dụng layout item_chung.xml).
+    + Khi click vào item: nếu là chat 1-1 thì mở chat.xml, nếu là nhóm thì mở chat_group.xml.
+
+• ID: btnNewChat
+  - Kiểu View: com.google.android.material.button.MaterialButton
+  - Chức năng: Nút "Trò chuyện mới" (Floating style góc dưới phải).
+  - Logic code: setOnClickListener -> Mở danh sách bạn bè để chọn chat hoặc mở màn hình Tạo nhóm (create_group.xml).
+
+• ID: tabMessages
+  - Kiểu View: LinearLayout (trong bottomNavigation)
+  - Chức năng: Tab "Tin nhắn" ở thanh điều hướng đáy (màn hình hiện tại).
+
+• ID: tabFriends
+  - Kiểu View: LinearLayout (trong bottomNavigation)
+  - Chức năng: Tab "Bạn bè" ở thanh điều hướng đáy.
+  - Logic code: setOnClickListener -> Mở màn hình Bạn bè (friends.xml).
+
+
+----------------------------------------------------------------------------------------------------
+5. FILE LAYOUT: item_chung.xml
+Tên component: Item hàng hiển thị cho RecyclerView trong màn hình chung.xml
+Adapter gợi ý: ChatListAdapter.java (ViewHolder: ChatViewHolder)
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: layoutAvatar
+  - Kiểu View: FrameLayout
+  - Chức năng: Khung chứa avatar.
+
+• ID: tvAvatarText
+  - Kiểu View: TextView
+  - Chức năng: Chữ cái đầu tên người gửi (vd: "H", "A") hiển thị khi chưa có ảnh avatar.
+
+• ID: tvSenderName
+  - Kiểu View: TextView
+  - Chức năng: Tên người gửi hoặc tên nhóm (vd: "Hoàng", "Nhóm Dự Án").
+
+• ID: tvTime
+  - Kiểu View: TextView
+  - Chức năng: Thời gian gửi tin nhắn cuối cùng (vd: "09:42", "Hôm qua").
+
+• ID: tvLastMessage
+  - Kiểu View: TextView
+  - Chức năng: Nội dung tóm tắt của tin nhắn cuối cùng.
+
+• ID: tvUnreadBadgeCard
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Khung tròn chứa số tin nhắn chưa đọc.
+  - Logic code: Nếu số tin chưa đọc > 0 -> setVisibility(View.VISIBLE), ngược lại View.GONE.
+
+• ID: tvUnreadBadge
+  - Kiểu View: TextView
+  - Chức năng: Hiển thị số đếm tin nhắn chưa đọc (vd: "2", "5").
+
+• Click cả item: itemView.setOnClickListener -> Mở chat.xml (kèm theo userId / conversationId qua Intent extra).
+
+
+----------------------------------------------------------------------------------------------------
+6. FILE LAYOUT: chat.xml
+Tên màn hình: Màn hình Trò chuyện 1 - 1 (Direct Chat)
+Activity/Fragment gợi ý: ChatActivity.java / ChatDetailActivity.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: btnBack
+  - Kiểu View: ImageView
+  - Chức năng: Nút mũi tên quay lại màn hình danh sách chat (chung.xml).
+  - Logic code: setOnClickListener -> finish().
+
+• ID: layoutAvatar
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Avatar người đang trò chuyện cùng.
+
+• ID: tvUserName
+  - Kiểu View: TextView
+  - Chức năng: Tên người đang trò chuyện (vd: "Tuấn", "Hoàng").
+  - Logic code: Nhận tên từ Intent và set vào TextView.
+
+• ID: layoutEncryptionNotice
+  - Kiểu View: LinearLayout
+  - Chức năng: Dòng thông báo màu xanh "Được mã hóa đầu cuối".
+
+• ID: rvMessages
+  - Kiểu View: androidx.recyclerview.widget.RecyclerView
+  - Chức năng: Danh sách tin nhắn qua lại trong cuộc trò chuyện.
+  - Logic code:
+    + LinearLayoutManager với stackFromEnd = true (để tự cuộn xuống cuối khi có tin mới).
+    + MessageAdapter hỗ trợ 2 kiểu View Type:
+      * TYPE_SENT -> nạp layout item_message_sent.xml (tin nhắn của mình).
+      * TYPE_RECEIVED -> nạp layout item_message_received.xml (tin nhắn của đối phương).
+
+• ID: btnAttach
+  - Kiểu View: ImageView
+  - Chức năng: Nút icon cái ghim để chọn tệp đính kèm / ảnh gửi đi.
+  - Logic code: setOnClickListener -> Mở ImagePicker / FileChooser.
+
+• ID: etMessageInput
+  - Kiểu View: EditText
+  - Chức năng: Ô gõ nội dung tin nhắn cần gửi.
+  - Logic code: Lấy nội dung tin nhắn, clear sau khi gửi.
+
+• ID: btnSend
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút tròn xanh gửi tin nhắn.
+  - Logic code: setOnClickListener -> Lấy text từ etMessageInput -> Kiểm tra rỗng -> Gửi tin nhắn lên Realtime Database / Firestore / Socket -> Xóa trắng ô nhập -> Cuộn RecyclerView xuống đáy.
+
+
+----------------------------------------------------------------------------------------------------
+7. FILE LAYOUT: chat_group.xml
+Tên màn hình: Màn hình Trò chuyện Nhóm (Group Chat)
+Activity/Fragment gợi ý: GroupChatActivity.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: btnBack
+  - Kiểu View: ImageView
+  - Chức năng: Nút quay lại màn hình trước.
+
+• ID: cardGroupAvatar
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Khung avatar nhóm.
+
+• ID: tvGroupName
+  - Kiểu View: TextView
+  - Chức năng: Tên nhóm chat (vd: "Trò chuyện nhóm", "Nhóm Đồ Án").
+
+• ID: tvMemberCount
+  - Kiểu View: TextView
+  - Chức năng: Hiển thị số lượng thành viên nhóm (vd: "4 thành viên").
+
+• ID: btnGroupInfo
+  - Kiểu View: ImageView (icon info 'i')
+  - Chức năng: Mở xem thông tin nhóm, danh sách thành viên, thêm/xóa thành viên.
+  - Logic code: setOnClickListener -> Mở GroupInfoActivity / BottomSheetDialog.
+
+• ID: layoutEncryptionNotice
+  - Kiểu View: LinearLayout
+  - Chức năng: Banner thông báo "Được mã hóa đầu cuối".
+
+• ID: rvGroupMessages
+  - Kiểu View: androidx.recyclerview.widget.RecyclerView
+  - Chức năng: Danh sách tin nhắn nhóm (dùng chung logic MessageAdapter với chat 1-1, nhưng ở item_message_received.xml sẽ hiển thị thêm tên người gửi tvSenderMemberName).
+
+• ID: btnAttach
+  - Kiểu View: ImageView
+  - Chức năng: Nút đính kèm ảnh / tệp tin.
+
+• ID: etMessageInput
+  - Kiểu View: EditText
+  - Chức năng: Ô nhập tin nhắn cho nhóm.
+
+• ID: btnSend
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút gửi tin nhắn nhóm.
+
+
+----------------------------------------------------------------------------------------------------
+8. FILE LAYOUT: item_message_sent.xml
+Tên component: Item tin nhắn do chính người dùng gửi đi (Bong bóng xanh bên phải)
+Adapter gợi ý: MessageAdapter.java (SentMessageViewHolder)
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: tvMessageSent
+  - Kiểu View: TextView
+  - Chức năng: Hiển thị nội dung tin nhắn gửi đi.
+
+• ID: tvTimeSent
+  - Kiểu View: TextView
+  - Chức năng: Hiển thị giờ gửi (vd: "09:33").
+
+• ID: ivTick
+  - Kiểu View: ImageView
+  - Chức năng: Dấu tích trạng thái tin nhắn (đã gửi / đã nhận / đã đọc). Có thể đổi icon hoặc đổi màu tint tùy trạng thái.
+
+
+----------------------------------------------------------------------------------------------------
+9. FILE LAYOUT: item_message_received.xml
+Tên component: Item tin nhắn nhận từ người khác (Bong bóng trắng bên trái)
+Adapter gợi ý: MessageAdapter.java (ReceivedMessageViewHolder)
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: tvSenderMemberName
+  - Kiểu View: TextView
+  - Chức năng: Tên của người gửi tin nhắn (rất quan trọng trong chat nhóm).
+  - Logic code: Trong chat 1-1 thì set GONE; trong chat nhóm thì set VISIBLE và gán tên người gửi.
+
+• ID: cardBubbleReceived
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Khung bo viền bong bóng tin nhắn nhận.
+
+• ID: tvMessageContent
+  - Kiểu View: TextView
+  - Chức năng: Nội dung tin nhắn nhận được.
+
+• ID: tvMessageTime
+  - Kiểu View: TextView
+  - Chức năng: Giờ nhận tin nhắn (vd: "08:15").
+
+
+----------------------------------------------------------------------------------------------------
+10. FILE LAYOUT: friends.xml
+Tên màn hình: Màn hình Quản lý Bạn bè & Lời mời kết bạn (Friends Management)
+Activity/Fragment gợi ý: FriendsActivity.java / FriendsFragment.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: tvHeaderFriends
+  - Kiểu View: TextView
+  - Chức năng: Tiêu đề "Bạn bè".
+
+• ID: btnAddFriend
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút icon "Thêm bạn" góc phải header.
+  - Logic code: setOnClickListener -> Hiển thị Dialog tìm kiếm người dùng theo Email/SĐT để gửi lời mời kết bạn.
+
+• ID: cardSearch / etSearchFriend
+  - Kiểu View: MaterialCardView / EditText
+  - Chức năng: Ô tìm kiếm trong danh sách bạn bè hiện tại.
+  - Logic code: addTextChangedListener -> Lọc danh sách trên rvFriendsList.
+
+• ID: layoutRequestHeader / tvRequestBadge
+  - Kiểu View: LinearLayout / TextView
+  - Chức năng: Huy hiệu đếm số lời mời kết bạn đang chờ (vd: "1"). Ẩn cụm này nếu không có lời mời nào.
+
+• ID: cardFriendRequest
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Khung card hiển thị lời mời kết bạn mới nhất.
+
+• ID: cardReqAvatar
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Avatar người gửi lời mời kết bạn.
+
+• ID: tvReqName
+  - Kiểu View: TextView
+  - Chức năng: Tên người gửi lời mời (vd: "Thiên Ân").
+
+• ID: btnAccept
+  - Kiểu View: com.google.android.material.button.MaterialButton
+  - Chức năng: Nút "Chấp nhận" kết bạn.
+  - Logic code: setOnClickListener -> Gọi API/Firestore chấp nhận kết bạn -> Cập nhật trạng thái thành bạn bè -> Làm mới danh sách bạn bè.
+
+• ID: btnDecline
+  - Kiểu View: com.google.android.material.button.MaterialButton
+  - Chức năng: Nút "Từ chối" lời mời.
+  - Logic code: setOnClickListener -> Hủy lời mời kết bạn -> Ẩn card lời mời.
+
+• ID: tvFriendsCount
+  - Kiểu View: TextView
+  - Chức năng: Hiển thị tổng số lượng bạn bè (vd: "2 người").
+
+• ID: rvFriendsList
+  - Kiểu View: androidx.recyclerview.widget.RecyclerView
+  - Chức năng: Danh sách tất cả bạn bè (gắn FriendsAdapter sử dụng layout item_friend.xml).
+
+• ID: tabMessages
+  - Kiểu View: LinearLayout (trong bottomNavigation)
+  - Chức năng: Tab "Tin nhắn" ở đáy.
+  - Logic code: setOnClickListener -> Chuyển về màn hình tin nhắn chính (chung.xml).
+
+• ID: tabFriends
+  - Kiểu View: LinearLayout (trong bottomNavigation)
+  - Chức năng: Tab "Bạn bè" (tab hiện tại).
+
+
+----------------------------------------------------------------------------------------------------
+11. FILE LAYOUT: item_friend.xml
+Tên component: Item bạn bè cho RecyclerView trong màn hình friends.xml
+Adapter gợi ý: FriendsAdapter.java (ViewHolder: FriendViewHolder)
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: cardAvatar / tvAvatarChar
+  - Kiểu View: MaterialCardView / TextView
+  - Chức năng: Khung tròn avatar & chữ cái đại diện tên bạn bè.
+
+• ID: tvFriendName
+  - Kiểu View: TextView
+  - Chức năng: Tên của bạn bè (vd: "Hoàng", "Tuấn").
+
+• ID: btnDeleteFriend
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút màu đỏ icon thùng rác để Xóa bạn bè.
+  - Logic code: setOnClickListener -> Hiển thị AlertDialog xác nhận "Bạn có chắc muốn hủy kết bạn?" -> Xóa khỏi danh sách bạn bè.
+
+• ID: btnMessageDirect
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút màu xanh icon tin nhắn để Nhắn tin nhanh.
+  - Logic code: setOnClickListener -> Mở ngay màn hình chat 1-1 (chat.xml) với người bạn này.
+
+
+----------------------------------------------------------------------------------------------------
+12. FILE LAYOUT: create_group.xml
+Tên màn hình: Màn hình Tạo nhóm chat mới (Create Group Chat)
+Activity/Fragment gợi ý: CreateGroupActivity.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: btnBack
+  - Kiểu View: ImageView
+  - Chức năng: Nút quay lại màn hình trước.
+
+• ID: btnCreateGroup
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút "Tạo" nhóm ở góc trên bên phải header.
+  - Logic code:
+    + Bật/tắt trạng thái enable/disable dựa trên việc đã nhập tên nhóm và chọn ít nhất 1 thành viên.
+    + Khi click: Lưu nhóm mới vào Database (Tên nhóm, danh sách UID thành viên, thời gian tạo) -> Mở màn hình chat_group.xml của nhóm vừa tạo.
+
+• ID: tvBtnCreate
+  - Kiểu View: TextView (chữ "Tạo" trong btnCreateGroup).
+
+• ID: etGroupName
+  - Kiểu View: EditText (trong cardGroupNameInput)
+  - Chức năng: Ô nhập tên nhóm chat (vd: "Hội bạn thân", "Nhóm Đồ Án SafeChat").
+  - Logic code: Validate không được để trống.
+
+• ID: tvSelectedCount
+  - Kiểu View: TextView
+  - Chức năng: Badge hiển thị số lượng thành viên đã chọn (vd: "Đã chọn: 0", "Đã chọn: 3").
+  - Logic code: Cập nhật mỗi khi người dùng tích/bỏ tích chọn thành viên từ danh sách.
+
+• ID: etSearchMember
+  - Kiểu View: EditText (trong cardSearchMember)
+  - Chức năng: Ô tìm kiếm bạn bè trong danh sách để thêm vào nhóm.
+
+• ID: rvSelectMembers
+  - Kiểu View: androidx.recyclerview.widget.RecyclerView
+  - Chức năng: Danh sách bạn bè để chọn thêm vào nhóm (danh sách có kèm checkbox hoặc đổi trạng thái chọn).
+
+
+----------------------------------------------------------------------------------------------------
+13. FILE LAYOUT: profile.xml
+Tên màn hình: Màn hình Trang cá nhân & Đăng xuất (Profile / Account Settings)
+Activity/Fragment gợi ý: ProfileActivity.java
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: btnBack
+  - Kiểu View: ImageView
+  - Chức năng: Nút quay lại.
+
+• ID: cardProfileAvatar
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Khung tròn avatar lớn.
+
+• ID: tvAvatarChar
+  - Kiểu View: TextView
+  - Chức năng: Chữ cái đại diện khi chưa có ảnh đại diện (vd: "T").
+
+• ID: ivProfileAvatar
+  - Kiểu View: ImageView
+  - Chức năng: Ảnh đại diện tải từ URL (sử dụng Glide/Picasso). Mặc định GONE, khi có ảnh thì VISIBLE và ẩn tvAvatarChar.
+
+• ID: btnChangeAvatar
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút tròn icon máy ảnh để đổi avatar.
+  - Logic code: setOnClickListener -> Mở thư viện ảnh/camera -> Tải ảnh lên Firebase Storage/Cloudinary -> Cập nhật URL avatar vào profile.
+
+• ID: tvUserSubInfo
+  - Kiểu View: TextView
+  - Chức năng: Hiển thị email hoặc username (vd: "tuancd258@gmail.com").
+
+• ID: etFullName
+  - Kiểu View: EditText
+  - Chức năng: Ô chỉnh sửa Họ và tên người dùng.
+  - Logic code: Hiển thị tên hiện tại, cho phép sửa.
+
+• ID: btnSaveProfile
+  - Kiểu View: com.google.android.material.button.MaterialButton
+  - Chức năng: Nút "Lưu thay đổi".
+  - Logic code: setOnClickListener -> Cập nhật lại họ tên người dùng trong Database -> Toast thông báo thành công.
+
+• ID: btnLogout
+  - Kiểu View: com.google.android.material.card.MaterialCardView
+  - Chức năng: Nút "Đăng xuất" màu đỏ ở đáy màn hình.
+  - Logic code: setOnClickListener -> Xóa session/token đăng nhập -> FirebaseAuth.getInstance().signOut() -> Chuyển về màn Đăng nhập (dangnhap.xml) với flags FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK.
+
+
+----------------------------------------------------------------------------------------------------
+14. FILE LAYOUT: activity_main.xml
+Tên component: Layout mặc định
+----------------------------------------------------------------------------------------------------
+[DANH SÁCH VIEW CẦN CODE]
+• ID: main
+  - Kiểu View: androidx.constraintlayout.widget.ConstraintLayout
+  - Chức năng: Layout gốc, cài đặt WindowInsetsCompat hỗ trợ EdgeToEdge.
+
+====================================================================================================
+                        TỔNG HỢP LUỒNG ĐIỀU HƯỚNG CHÍNH (NAVIGATION MAP)
+====================================================================================================
+1. Khởi động:
+   cho.xml (Splash) 
+      ├──> Đã đăng nhập: chung.xml (Danh sách trò chuyện)
+      └──> Chưa đăng nhập: dangnhap.xml (Đăng nhập)
+
+2. Đăng nhập & Đăng ký:
+   dangnhap.xml <───────────────────────> dangky.xml
+      │                                       │
+      └─────────> Đăng nhập thành công ───────┘
+                        │
+                        ▼
+                    chung.xml
+
+3. Từ màn hình chính (chung.xml):
+   chung.xml
+      ├──> Click item cuộc trò chuyện 1-1 ─────────> chat.xml
+      ├──> Click item cuộc trò chuyện Nhóm ────────> chat_group.xml
+      ├──> Click btnProfile (Avatar header) ────────> profile.xml
+      ├──> Click btnNewChat ("Trò chuyện mới") ────> create_group.xml (hoặc danh sách bạn)
+      └──> Click tabFriends (Bottom bar) ───────────> friends.xml
+
+4. Từ màn hình bạn bè (friends.xml):
+   friends.xml
+      ├──> Click tabMessages (Bottom bar) ──────────> chung.xml
+      ├──> Click btnAddFriend ──────────────────────> Dialog Thêm bạn
+      └──> Click btnMessageDirect (ở item_friend) ──> chat.xml
+
+5. Từ màn hình Trang cá nhân (profile.xml):
+   profile.xml
+      ├──> Click btnBack ───────────────────────────> chung.xml
+      └──> Click btnLogout ─────────────────────────> dangnhap.xml (Xóa sạch task stack)
+====================================================================================================

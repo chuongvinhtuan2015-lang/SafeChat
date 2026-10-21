@@ -1,0 +1,31 @@
+<resources xmlns:tools="http://schemas.android.com/tools">
+    <!-- Base application theme kế thừa Theme.MaterialComponents -->
+    <style name="Theme.SafeChat" parent="Theme.MaterialComponents.DayNight.NoActionBar">
+        <!-- Tùy chỉnh màu nhận diện ứng dụng -->
+        <item name="colorPrimary">#4CAF50</item>
+        <item name="colorPrimaryVariant">#388E3C</item>
+        <item name="colorOnPrimary">#FFFFFF</item>
+        <item name="android:statusBarColor">#121212</item>
+        <item name="android:navigationBarColor">#121212</item>
+    </style>
+    <style name="ShapeAppearance.SafeChat.BubbleSent" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">16dp</item>
+        <item name="cornerSizeBottomRight">4dp</item>
+    </style>
+    <style name="Theme.SafeChat.Splash" parent="Theme.SafeChat">
+        <item name="android:windowDisablePreview">true</item>
+        <item name="android:windowBackground">@null</item>
+        <item name="android:windowIsTranslucent">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+    <!-- Bo góc bong bóng tin nhắn nhận về (Received Bubble) -->
+    <!-- Bo tròn 3 góc, góc dưới cùng bên trái bo nhỏ để tạo đuôi chat bên trái -->
+    <style name="ShapeAppearance.SafeChat.BubbleReceived" parent="ShapeAppearance.MaterialComponents.SmallComponent">
+        <item name="cornerSizeTopLeft">16dp</item>
+        <item name="cornerSizeTopRight">16dp</item>
+        <item name="cornerSizeBottomLeft">4dp</item>
+        <item name="cornerSizeBottomRight">16dp</item>
+    </style>
+</resources>

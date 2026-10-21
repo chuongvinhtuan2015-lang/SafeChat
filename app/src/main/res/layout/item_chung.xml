@@ -1,0 +1,124 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="12dp">
+
+    <!-- Avatar tròn -->
+    <FrameLayout
+        android:id="@+id/layoutAvatar"
+        android:layout_width="52dp"
+        android:layout_height="52dp"
+        app:layout_constraintBottom_toTopOf="@id/dividerLine"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <com.google.android.material.card.MaterialCardView
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:cardBackgroundColor="#EDE9FE"
+            app:cardCornerRadius="26dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
+
+            <TextView
+                android:id="@+id/tvAvatarText"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:gravity="center"
+                android:text="H"
+                android:textColor="#7C3AED"
+                android:textSize="18sp"
+                android:textStyle="bold" />
+        </com.google.android.material.card.MaterialCardView>
+
+
+    </FrameLayout>
+
+    <!-- Tên người nhắn / nhóm -->
+    <TextView
+        android:id="@+id/tvSenderName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="8dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Hoàng"
+        android:textColor="#0F172A"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintEnd_toStartOf="@id/tvTime"
+        app:layout_constraintStart_toEndOf="@id/layoutAvatar"
+        app:layout_constraintTop_toTopOf="@id/layoutAvatar" />
+
+    <!-- Thời gian -->
+    <TextView
+        android:id="@+id/tvTime"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="09:42"
+        android:textColor="#94A3B8"
+        android:textSize="12sp"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/tvSenderName" />
+
+    <!-- Nội dung tin nhắn cuối cùng -->
+    <TextView
+        android:id="@+id/tvLastMessage"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:layout_marginEnd="12dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Tôi đã gửi tài liệu cho cậu rồi nhé."
+        android:textColor="#64748B"
+        android:textSize="14sp"
+        app:layout_constraintEnd_toStartOf="@id/tvUnreadBadge"
+        app:layout_constraintStart_toStartOf="@id/tvSenderName"
+        app:layout_constraintTop_toBottomOf="@id/tvSenderName" />
+
+    <!-- Huy hiệu đếm tin nhắn chưa đọc (Badge tròn xanh dương) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/tvUnreadBadgeCard"
+        android:layout_width="20dp"
+        android:layout_height="20dp"
+        app:cardBackgroundColor="#2563EB"
+        app:cardCornerRadius="10dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toBottomOf="@id/tvLastMessage"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="@id/tvLastMessage">
+
+        <TextView
+            android:id="@+id/tvUnreadBadge"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="2"
+            android:textColor="#FFFFFF"
+            android:textSize="11sp"
+            android:textStyle="bold" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Đường gạch mờ ngăn cách từng hàng -->
+    <View
+        android:id="@+id/dividerLine"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_marginTop="14dp"
+        android:background="#F1F5F9"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@id/tvSenderName"
+        app:layout_constraintTop_toBottomOf="@id/layoutAvatar" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>

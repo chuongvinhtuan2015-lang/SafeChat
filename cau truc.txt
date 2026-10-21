@@ -1,0 +1,95 @@
+app/src/main/java/com/example/safechat/
+│
+├── SafeChatApplication.java                       // Khởi tạo Room, Firebase, Security Provider
+│
+├── crypto/                                        // [HỆ THỐNG MẬT MÃ CỐT LÕI & GIAO THỨC E2EE]
+│   ├── CryptoManager.java                         // X25519, Ed25519, PBKDF2, AES-256-GCM đóng/mở khóa bí mật
+│   ├── RatchetManager.java                        // Thuật toán xoay khóa KDF Chain cho Chat 1-1 (Forward Secrecy)
+│   ├── SenderKeyManager.java                      // Giao thức Sender Key Protocol cho Chat nhóm
+│   └── models/                                    // Cấu trúc dữ liệu gói tin mật mã
+│       ├── KeyBundle.java                         // Gói khóa bí mật đã mã hóa + Salt + IV
+│       ├── EncryptedMessagePayload.java           // Ciphertext, AuthTag, IV, Signature, KeyIndex
+│       └── SenderKeyDistributionMessage.java      // Gói phân phối khóa nhóm gửi qua kênh E2EE 1-1
+│
+├── data/                                          // [TẦNG DỮ LIỆU: LOCAL DB, CACHE & REMOTE FIREBASE]
+│   ├── local/
+│   │   ├── prefs/
+│   │   │   └── LocalDataManager.java              // EncryptedSharedPreferences (lưu session, Private Keys tạm)
+│   │   └── db/                                    // Room Database (Lưu dữ liệu giải mã ngoại tuyến)
+│   │       ├── AppDatabase.java                   // File cấu hình chính của Room Database
+│   │       ├── dao/
+│   │       │   ├── FriendDao.java                 // Thao tác bảng bạn bè và Public Keys bạn bè
+│   │       │   ├── ConversationDao.java           // Thao tác bảng danh sách cuộc trò chuyện gần đây
+│   │       │   ├── MessageDao.java                // Thao tác lưu/đọc tin nhắn đã giải mã
+│   │       │   ├── RatchetSessionDao.java         // Lưu trạng thái chuỗi khóa xoay (Chain Keys) 1-1
+│   │       │   └── GroupSenderKeyDao.java         // Lưu Sender Keys của các thành viên trong nhóm
+│   │       └── entities/
+│   │           ├── FriendEntity.java
+│   │           ├── ConversationEntity.java
+│   │           ├── MessageEntity.java
+│   │           ├── RatchetSessionEntity.java
+│   │           └── GroupSenderKeyEntity.java
+│   │
+│   ├── remote/                                    // Tương tác trực tiếp với Firebase APIs
+│   │   ├── FirebaseAuthSource.java                // Đăng ký, đăng nhập, reset mật khẩu, lấy UID
+│   │   ├── FirestoreDataSource.java               // Realtime Listener & CRUD: users, chats, groups, requests
+│   │   └── FirebaseStorageSource.java             // Tải lên / tải xuống file/ảnh nhị phân đã mã hóa
+│   │
+│   ├── repository/                                // [TẦNG REPOSITORY - Single Source of Truth]
+│   │   ├── AuthRepository.java                    // Điều phối xác thực Zero-Knowledge + Local Key storage
+│   │   ├── FriendRepository.java                  // Quản lý bạn bè, tìm kiếm, lưu cache Public Keys
+│   │   ├── ChatRepository.java                    // Xử lý mã hóa, xoay khóa, gửi/nhận & đồng bộ tin nhắn 1-1
+│   │   ├── GroupRepository.java                   // Điều phối Sender Key, phân phối khóa và chat nhóm
+│   │   ├── MediaRepository.java                   // Xử lý nén file, mã hóa AES file, upload Storage & gửi link
+│   │   └── ProfileRepository.java                 // Cập nhật thông tin cá nhân, avatar, xóa sạch khóa khi logout
+│   │
+│   └── models/                                    // Domain / DTO Models trao đổi dữ liệu
+│       ├── User.java                              // Dữ liệu người dùng trên Firestore
+│       ├── FriendRequest.java                     // Lời mời kết bạn
+│       ├── Conversation.java                      // Model item cuộc trò chuyện ở trang chủ
+│       ├── Message.java                           // Tin nhắn hiển thị trên giao diện
+│       ├── Group.java                             // Dữ liệu nhóm chat và danh sách thành viên
+│       └── MediaMetadata.java                     // Thông tin tệp đính kèm (URL, tên, dung lượng, key AES bọc)
+│
+├── ui/                                            // [TẦNG GIAO DIỆN & VIEWMODEL THEO TỪNG MÀN HÌNH]
+│   ├── splash/
+│   │   └── ChoActivity.java                       // Kiểm tra phiên đăng nhập & điều hướng
+│   │
+│   ├── auth/
+│   │   ├── DangNhapActivity.java                  // Màn hình Đăng nhập
+│   │   ├── DangNhapViewModel.java                 // Xử lý logic đăng nhập & bóc tách gói khóa
+│   │   ├── DangKyActivity.java                    // Màn hình Đăng ký
+│   │   └── DangKyViewModel.java                   // Xử lý logic tạo tài khoản, sinh khóa & đóng gói AES-GCM
+│   │
+│   ├── home/
+│   │   ├── ChungActivity.java                     // Màn hình chính (danh sách chat, search, bottom nav)
+│   │   ├── ChungViewModel.java                    // Lắng nghe danh sách hội thoại từ Room & Firestore
+│   │   └── ConversationAdapter.java               // Adapter hiển thị item cuộc trò chuyện gần đây
+│   │
+│   ├── friends/
+│   │   ├── FriendsActivity.java                   // Màn hình Danh sách bạn bè & Lời mời kết bạn
+│   │   ├── FriendsViewModel.java                  // Tìm kiếm user, chấp nhận/từ chối/xóa bạn
+│   │   ├── FriendAdapter.java                     // Adapter hiển thị danh sách bạn bè
+│   │   └── FriendRequestAdapter.java              // Adapter hiển thị lời mời kết bạn (dạng thu gọn)
+│   │
+│   ├── chat/
+│   │   ├── ChatActivity.java                      // Màn hình Chat 1-1 E2EE
+│   │   ├── ChatViewModel.java                     // Kích hoạt xoay khóa KDF, gửi tin nhắn văn bản / tệp
+│   │   └── MessageAdapter.java                    // Adapter dùng chung hiển thị tin gửi / tin nhận
+│   │
+│   ├── group/
+│   │   ├── CreateGroupActivity.java               // Màn hình Tạo nhóm chat mới
+│   │   ├── CreateGroupViewModel.java              // Khởi tạo nhóm & sinh Sender Key phân phối
+│   │   ├── SelectMemberAdapter.java               // Adapter chọn bạn bè vào nhóm
+│   │   ├── GroupChatActivity.java                 // Màn hình Chat nhóm bảo mật
+│   │   └── GroupChatViewModel.java                // Mã hóa/giải mã tin nhắn nhóm theo Sender Key
+│   │
+│   └── profile/
+│       ├── ProfileActivity.java                   // Màn hình Trang cá nhân & Đổi Avatar
+│       └── ProfileViewModel.java                  // Cập nhật tên, tải avatar, xử lý xóa sạch khóa khi đăng xuất
+│
+└── utils/                                         // [TIỆN ÍCH HỖ TRỢ XỬ LÝ DỮ LIỆU & MEDIA]
+    ├── MediaCompressor.java                       // Nén Bitmap thông minh (JPEG/WebP) & xử lý video nhẹ
+    ├── FileHelper.java                            // Đọc file từ Uri thành byte array, lấy tên, size, MIME type
+    ├── DateTimeUtils.java                         // Định dạng giờ hiển thị (09:33, hôm qua, ngày/tháng)
+    └── Constants.java                             // Định nghĩa hằng số Firestore Collections, Preferences keys
