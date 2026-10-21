@@ -1,16 +1,23 @@
 package com.example.safechat.crypto;
 
 import android.util.Base64;
+
 import com.example.safechat.crypto.models.KeyBundle;
 
 import java.nio.ByteBuffer;
 import java.security.GeneralSecurityException;
+import java.security.KeyFactory;
 import java.security.KeyPair;
 import java.security.KeyPairGenerator;
+import java.security.PrivateKey;
+import java.security.PublicKey;
 import java.security.SecureRandom;
+import java.security.spec.PKCS8EncodedKeySpec;
+import java.security.spec.X509EncodedKeySpec;
 import java.util.Arrays;
 
 import javax.crypto.Cipher;
+import javax.crypto.KeyAgreement;
 import javax.crypto.SecretKey;
 import javax.crypto.SecretKeyFactory;
 import javax.crypto.spec.GCMParameterSpec;
@@ -30,6 +37,39 @@ public final class CryptoManager {
 
     private CryptoManager() {
         // Utility class
+    }
+
+    /**
+     * Tạo Shared Secret giữa 2 người dùng qua thuật toán ECDH (X25519)
+     */
+    public static String generateSharedSecret(byte[] myPrivateKeyBytes, String peerPublicKeyBase64) {
+        if (myPrivateKeyBytes == null || peerPublicKeyBase64 == null || peerPublicKeyBase64.isEmpty()) {
+            return null;
+        }
+        try {
+            // 1. Giải mã Public Key của đối phương từ Base64
+            byte[] peerPublicKeyBytes = Base64.decode(peerPublicKeyBase64, Base64.DEFAULT);
+            KeyFactory keyFactory = KeyFactory.getInstance("X25519", PROVIDER_BC);
+
+            X509EncodedKeySpec publicKeySpec = new X509EncodedKeySpec(peerPublicKeyBytes);
+            PublicKey peerPublicKey = keyFactory.generatePublic(publicKeySpec);
+
+            // 2. Chuyển đổi Private Key của bản thân
+            PKCS8EncodedKeySpec privateKeySpec = new PKCS8EncodedKeySpec(myPrivateKeyBytes);
+            PrivateKey myPrivateKey = keyFactory.generatePrivate(privateKeySpec);
+
+            // 3. Thực hiện Key Agreement (ECDH / X25519)
+            KeyAgreement keyAgreement = KeyAgreement.getInstance("X25519", PROVIDER_BC);
+            keyAgreement.init(myPrivateKey);
+            keyAgreement.doPhase(peerPublicKey, true);
+
+            // 4. Mảng byte khóa chung thu được -> chuyển sang chuỗi Base64
+            byte[] sharedSecretBytes = keyAgreement.generateSecret();
+            return Base64.encodeToString(sharedSecretBytes, Base64.NO_WRAP);
+        } catch (Exception e) {
+            e.printStackTrace();
+            return null;
+        }
     }
 
     /**
@@ -60,7 +100,6 @@ public final class CryptoManager {
 
     /**
      * Đóng gói Private Keys (X25519 & Ed25519) bằng AES-256-GCM dựa trên mã khôi phục[cite: 1]
-     * @return Chuỗi Base64 đóng gói sẵn sàng lưu lên Firestore[cite: 1]
      */
     public static String encryptKeyBundle(byte[] x25519Priv, byte[] ed25519Priv, String recoveryCode) throws GeneralSecurityException {
         // 1. Sinh Salt và IV ngẫu nhiên[cite: 1]

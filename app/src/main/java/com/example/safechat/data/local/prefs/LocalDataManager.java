@@ -10,6 +10,7 @@ import com.example.safechat.crypto.CryptoManager;
 import com.example.safechat.utils.Constants;
 
 public class LocalDataManager {
+
     private static volatile LocalDataManager instance;
     private final SharedPreferences securePrefs;
 
@@ -43,7 +44,7 @@ public class LocalDataManager {
     }
 
     /**
-     * Lưu trữ phiên làm việc và Private Keys tạm thời trên thiết bị[cite: 1, 2]
+     * Lưu trữ phiên làm việc và Private Keys tạm thời trên thiết bị
      */
     public void saveSession(String uid, String email, String fullName, byte[] x25519Priv, byte[] ed25519Priv) {
         securePrefs.edit()
@@ -77,6 +78,22 @@ public class LocalDataManager {
         return securePrefs.getString(Constants.KEY_FULL_NAME, "");
     }
 
+    public void setFullName(String fullName) {
+        securePrefs.edit()
+                .putString(Constants.KEY_FULL_NAME, fullName)
+                .apply();
+    }
+
+    public String getAvatarUrl() {
+        return securePrefs.getString(Constants.KEY_AVATAR_URL, null);
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        securePrefs.edit()
+                .putString(Constants.KEY_AVATAR_URL, avatarUrl)
+                .apply();
+    }
+
     public byte[] getX25519PrivateKey() {
         String base64 = securePrefs.getString(Constants.KEY_X25519_PRIVATE, null);
         return base64 != null ? CryptoManager.fromBase64(base64) : null;
@@ -86,9 +103,17 @@ public class LocalDataManager {
         String base64 = securePrefs.getString(Constants.KEY_ED25519_PRIVATE, null);
         return base64 != null ? CryptoManager.fromBase64(base64) : null;
     }
+    // LƯU VÀ ĐỌC KHÓA BÍ MẬT DÙNG DỰ ÁN SAFECHAT
+    public void saveEncryptedSecret(String key, String secretValue) {
+        securePrefs.edit().putString(key, secretValue).apply();
+    }
+
+    public String getEncryptedSecret(String key) {
+        return securePrefs.getString(key, null);
+    }
 
     /**
-     * Xóa sạch Private Keys và thông tin phiên khi đăng xuất[cite: 1]
+     * Xóa sạch Private Keys và thông tin phiên khi đăng xuất
      */
     public void clearSession() {
         securePrefs.edit().clear().apply();

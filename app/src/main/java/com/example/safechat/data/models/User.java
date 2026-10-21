@@ -4,6 +4,7 @@ public class User {
     private String uid;
     private String fullName;
     private String email;
+    private String avatarUrl;
     private String publicKeyX25519;
     private String publicKeyEd25519;
     private String encryptedKeyBundle;
@@ -44,4 +45,11 @@ public class User {
 
     public long getCreatedAt() { return createdAt; }
     public void setCreatedAt(long createdAt) { this.createdAt = createdAt; }
+    public String getAvatarUrl() {
+        return avatarUrl;
+    }
+
+    public void setAvatarUrl(String avatarUrl) {
+        this.avatarUrl = avatarUrl;
+    }
 }
