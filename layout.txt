@@ -521,7 +521,12 @@ Activity/Fragment gợi ý: ProfileActivity.java
 [DANH SÁCH VIEW CẦN CODE]
 • ID: btnBack
   - Kiểu View: ImageView
-  - Chức năng: Nút quay lại.
+  - Chức năng: Nút mũi tên quay lại màn hình trước.
+  - Logic code: setOnClickListener -> finish().
+
+• ID: tvHeaderTitle
+  - Kiểu View: TextView
+  - Chức năng: Tiêu đề "Trang cá nhân".
 
 • ID: cardProfileAvatar
   - Kiểu View: com.google.android.material.card.MaterialCardView
@@ -536,9 +541,9 @@ Activity/Fragment gợi ý: ProfileActivity.java
   - Chức năng: Ảnh đại diện tải từ URL (sử dụng Glide/Picasso). Mặc định GONE, khi có ảnh thì VISIBLE và ẩn tvAvatarChar.
 
 • ID: btnChangeAvatar
-  - Kiểu View: com.google.android.material.card.MaterialCardView
-  - Chức năng: Nút tròn icon máy ảnh để đổi avatar.
-  - Logic code: setOnClickListener -> Mở thư viện ảnh/camera -> Tải ảnh lên Firebase Storage/Cloudinary -> Cập nhật URL avatar vào profile.
+  - Kiểu View: FrameLayout (vùng chạm 48dp chứa nút camera tròn)
+  - Chức năng: Nút đổi ảnh đại diện.
+  - Logic code: setOnClickListener -> Mở thư viện ảnh/camera -> Nén ảnh -> Tải lên Firebase Storage -> Cập nhật URL avatar vào Firestore.
 
 • ID: tvUserSubInfo
   - Kiểu View: TextView
@@ -547,17 +552,40 @@ Activity/Fragment gợi ý: ProfileActivity.java
 • ID: etFullName
   - Kiểu View: EditText
   - Chức năng: Ô chỉnh sửa Họ và tên người dùng.
-  - Logic code: Hiển thị tên hiện tại, cho phép sửa.
+  - Logic code: Hiển thị tên hiện tại, cho phép người dùng sửa đổi.
+
+• ID: ivEditNameIcon
+  - Kiểu View: ImageView
+  - Chức năng: Icon cây bút trang trí ô nhập tên.
 
 • ID: btnSaveProfile
   - Kiểu View: com.google.android.material.button.MaterialButton
-  - Chức năng: Nút "Lưu thay đổi".
-  - Logic code: setOnClickListener -> Cập nhật lại họ tên người dùng trong Database -> Toast thông báo thành công.
+  - Chức năng: Nút "Cập nhật họ tên".
+  - Logic code: setOnClickListener -> Validate tên không rỗng -> Cập nhật `fullName` lên Firestore -> Cập nhật Local Cache / Session -> Toast thông báo thành công.
+
+• ID: tilCurrentPassword / etCurrentPassword
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập Mật khẩu hiện tại (có icon ẩn/hiện mật khẩu).
+  - Logic code: Dùng để xác thực lại danh tính (re-authenticate với Firebase Auth: `EmailAuthProvider.getCredential(email, currentPass)`).
+
+• ID: tilNewPassword / etNewPassword
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập Mật khẩu mới (tối thiểu 8 ký tự, có icon ẩn/hiện mật khẩu).
+
+• ID: tilConfirmNewPassword / etConfirmNewPassword
+  - Kiểu View: TextInputLayout / TextInputEditText
+  - Chức năng: Ô nhập Xác nhận mật khẩu mới (có icon ẩn/hiện mật khẩu).
+  - Logic code: Kiểm tra trùng khớp với `etNewPassword`.
+
+• ID: btnChangePassword
+  - Kiểu View: com.google.android.material.button.MaterialButton
+  - Chức năng: Nút "Cập nhật mật khẩu".
+  - Logic code: setOnClickListener -> Validate (mật khẩu hiện tại không rỗng, mật khẩu mới >= 8 ký tự, mật khẩu mới trùng khớp xác nhận) -> Gọi Firebase `user.reauthenticate()` -> Gọi `user.updatePassword(newPass)` -> Báo thành công -> Xóa trắng các ô nhập mật khẩu.
 
 • ID: btnLogout
   - Kiểu View: com.google.android.material.card.MaterialCardView
   - Chức năng: Nút "Đăng xuất" màu đỏ ở đáy màn hình.
-  - Logic code: setOnClickListener -> Xóa session/token đăng nhập -> FirebaseAuth.getInstance().signOut() -> Chuyển về màn Đăng nhập (dangnhap.xml) với flags FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK.
+  - Logic code: setOnClickListener -> Xóa toàn bộ Private Keys trong bộ nhớ RAM và EncryptedSharedPreferences -> `FirebaseAuth.getInstance().signOut()` -> Chuyển về màn Đăng nhập (`DangNhapActivity`) với flags `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK`.
 
 
 ----------------------------------------------------------------------------------------------------

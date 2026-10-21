@@ -18,7 +18,7 @@ Truyền tải đa phương tiện: Nén ảnh thông minh, file PDF, Word (.doc
                         TỔNG QUAN LỘ TRÌNH 7 GIAI ĐOẠN (ROADMAP)
 ====================================================================================================
 Giai đoạn 1: Nền tảng Mật mã, Lưu trữ Cục bộ & Xác thực Tài khoản (Zero-Knowledge Auth)
-Giai đoạn 2: Quản lý Hồ sơ Cá nhân, Cập nhật Avatar & Đăng xuất An toàn
+Giai đoạn 2: Quản lý Hồ sơ Cá nhân, Đổi Mật khẩu, Cập nhật Avatar & Đăng xuất An toàn
 Giai đoạn 3: Hệ thống Bạn bè, Tìm kiếm, Lời mời Kết bạn & Trao đổi Khóa Ban đầu
 Giai đoạn 4: Trò chuyện 1-1 Mã hóa Đầu cuối (E2EE 1-1) & Cơ chế Xoay khóa (Key Ratchet / Rotation)
 Giai đoạn 5: Chat Nhóm Bảo mật bằng Giao thức Sender Key (Group E2EE & Group Key Rotation)
@@ -119,25 +119,44 @@ khởi đầu (Chờ -> Đăng nhập / Đăng ký -> Màn hình chính điều 
 
 
 ----------------------------------------------------------------------------------------------------
-GIAI ĐOẠN 2: QUẢN LÝ HỒ SƠ CÁ NHÂN, CẬP NHẬT AVATAR & ĐĂNG XUẤT AN TOÀN
+GIAI ĐOẠN 2: QUẢN LÝ HỒ SƠ CÁ NHÂN, ĐỔI MẬT KHẨU, CẬP NHẬT AVATAR & ĐĂNG XUẤT AN TOÀN
 ----------------------------------------------------------------------------------------------------
 Mục tiêu cốt lõi:
-Hoàn thiện màn hình Trang cá nhân `profile.xml`, cập nhật hồ sơ, đổi ảnh đại diện và xử lý cơ chế đăng xuất an toàn
-xóa sạch khóa nhạy cảm trên thiết bị ngay sau khi hoàn thành luồng xác thực Giai đoạn 1.
+Hoàn thiện màn hình Trang cá nhân `profile.xml`, hỗ trợ người dùng xem và cập nhật họ tên, đổi ảnh đại diện
+(nén ảnh lên Firebase Storage), đổi mật khẩu an toàn (xác thực lại danh tính) và xử lý cơ chế đăng xuất
+xóa sạch toàn bộ khóa bí mật nhạy cảm trên thiết bị.
 
 [CÁC BƯỚC THỰC HIỆN CỤ THỂ]
-1. `ProfileActivity.java` (Gắn layout `profile.xml`):
-   - Hiển thị thông tin: Họ tên (`etFullName`), Email (`tvUserSubInfo`), Avatar hiện tại (`ivProfileAvatar` / `tvAvatarChar`).
-   - Đổi ảnh đại diện:
-     * Bấm `btnChangeAvatar` -> Chọn ảnh từ thư viện -> Nén ảnh tròn -> Tải lên Firebase Storage -> Cập nhật trường `avatarUrl` trong `users/{uid}`.
-   - Đổi họ tên:
-     * Bấm `btnSaveProfile` -> Cập nhật `fullName` lên Firestore -> Cập nhật Local Cache -> Báo Toast thành công.
+1. `ProfileActivity.java` (Gắn layout `profile.xml`) & `ProfileViewModel.java`:
+   a. Hiển thị thông tin hồ sơ:
+      - Tải thông tin từ `LocalDataManager` / Firestore: Họ tên (`etFullName`), Email (`tvUserSubInfo`), Avatar (`ivProfileAvatar` / `tvAvatarChar`).
+   b. Đổi ảnh đại diện (`btnChangeAvatar`):
+      - Mở trình chọn ảnh từ thư viện (ActivityResultLauncher).
+      - Nén ảnh tròn qua Bitmap / WebP để tối ưu dung lượng nhẹ (< 200KB).
+      - Tải lên Firebase Storage đường dẫn `avatars/{uid}.jpg`.
+      - Cập nhật trường `avatarUrl` trong document `users/{uid}` trên Firestore và cập nhật cache cục bộ.
+   c. Cập nhật họ tên (`btnSaveProfile`):
+      - Validate tên mới không được để trống.
+      - Cập nhật `fullName` lên document `users/{uid}` trên Firestore.
+      - Cập nhật lại session `LocalDataManager` để đồng bộ hiển thị lên `tvAdminName` ở màn hình chính.
+      - Báo Toast thành công.
+   d. Đổi mật khẩu (`btnChangePassword`):
+      - Lấy dữ liệu: Mật khẩu hiện tại (`etCurrentPassword`), Mật khẩu mới (`etNewPassword`), Xác nhận mật khẩu mới (`etConfirmNewPassword`).
+      - Validate:
+        * Không để trống ô nào.
+        * Mật khẩu mới tối thiểu 8 ký tự.
+        * Mật khẩu mới và xác nhận mật khẩu mới phải trùng khớp nhau.
+        * Mật khẩu mới không được trùng với mật khẩu hiện tại.
+      - Xác thực lại danh tính (Re-authenticate): Dùng `EmailAuthProvider.getCredential(currentUser.getEmail(), currentPassword)` để xác minh mật khẩu hiện tại là chính xác.
+      - Cập nhật mật khẩu mới qua `currentUser.updatePassword(newPassword)`.
+      - Xóa trắng các ô nhập mật khẩu sau khi đổi thành công và hiển thị Toast thông báo.
 2. Đăng xuất an toàn (`btnLogout`):
-   - Xóa toàn bộ Private Keys trong bộ nhớ RAM và `EncryptedSharedPreferences`.
+   - Xóa toàn bộ Private Keys trong bộ nhớ RAM (`CryptoManager`) và `EncryptedSharedPreferences` (`LocalDataManager.clearSession()`).
    - Gọi `FirebaseAuth.getInstance().signOut()`.
    - Chuyển hướng người dùng về `DangNhapActivity.java` với các cờ `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK` để xóa sạch backstack, ngăn người dùng bấm nút Back quay lại ứng dụng.
 3. Liên kết từ Màn hình chính (`ChungActivity.java`):
    - Bấm `btnProfile` ở header -> Mở `ProfileActivity.java`.
+   - Khi quay lại từ `ProfileActivity`, `ChungActivity` tự động cập nhật lại tên và avatar mới nhất.
 
 
 ----------------------------------------------------------------------------------------------------
