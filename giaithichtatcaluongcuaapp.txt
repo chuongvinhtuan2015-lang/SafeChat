@@ -1,0 +1,369 @@
+====================================================================================================
+               SAFECHAT - GIẢI THÍCH CHI TIẾT TOÀN BỘ CÁC LUỒNG HOẠT ĐỘNG CỦA HỆ THỐNG
+====================================================================================================
+
+Tài liệu này phân tích chi tiết từng luồng hoạt động từ Client (Android Java MVVM), Hệ thống Mật mã E2EE (Bouncy Castle), 
+Local Database (Room, EncryptedSharedPreferences) đến Remote Server (Firebase Authentication, Firestore, FCM và Cloud Functions Node.js).
+
+MỤC LỤC:
+1. LUỒNG KHỞI TẠO ỨNG DỤNG & MÀN HÌNH CHỜ (SPLASH - CHOACTIVITY)
+2. LUỒNG ĐĂNG KÝ TÀI KHOẢN (ZERO-KNOWLEDGE REGISTRATION)
+3. LUỒNG ĐĂNG NHẬP & BÓC TÁCH KHÓA BẢO MẬT (LOGIN & KEY EXTRACTION)
+4. LUỒNG QUÊN MẬT KHẨU (FORGOT PASSWORD)
+5. LUỒNG TÌM KIẾM, GỬI LỜI MỜI & CHẤP NHẬN KẾT BẠN (KEY AGREEMENT / ECDH)
+6. LUỒNG ĐỒNG BỘ BẠN BÈ VÀ HỘI THOẠI (SYNC FRIENDS & CONVERSATIONS)
+7. LUỒNG NHẮN TIN 1-1 BẢO MẬT E2EE (KDF CHAIN RATCHET / FORWARD SECRECY)
+   - 7.1. Luồng Gửi tin nhắn (Sender Flow)
+   - 7.2. Luồng Nhận và Giải mã tin nhắn Realtime (Receiver Flow)
+8. LUỒNG THÔNG BÁO ĐẨY FCM (PUSH NOTIFICATION - FUNCTIONS NODE.JS & CLIENT)
+9. LUỒNG QUẢN LÝ TRANG CÁ NHÂN & ĐỔI MẬT KHẨU (PROFILE & SECURITY)
+10. LUỒNG ĐĂNG XUẤT AN TOÀN (SECURE LOGOUT / KEY PURGE)
+11. BẢNG TỔNG HỢP KIẾN TRÚC MẬT MÃ & LƯU TRỮ TRONG HỆ THỐNG
+
+====================================================================================================
+1. LUỒNG KHỞI TẠO ỨNG DỤNG & MÀN HÌNH CHỜ (SPLASH - CHOACTIVITY)
+====================================================================================================
+- Thành phần: SafeChatApplication -> ChoActivity -> AuthRepository -> LocalDataManager.
+- Mục đích: Đảm bảo thiết bị đã cài đặt môi trường mã hóa an toàn và kiểm tra tính toàn vẹn của phiên đăng nhập trước khi hiển thị giao diện.
+
+Các bước thực thi:
+1. SafeChatApplication:
+   - Khi tiến trình ứng dụng khởi động, hàm onCreate() tự động đăng ký `Security.insertProviderAt(new BouncyCastleProvider(), 1)`. 
+   - Điều này đưa thư viện Bouncy Castle lên mức ưu tiên cao nhất, hỗ trợ các thuật toán đường cong Elliptic X25519, Ed25519 và chuẩn mã hóa hiện đại.
+2. ChoActivity (Màn hình chờ):
+   - Gọi `AuthRepository.isUserLoggedInAndUnlocked()`.
+   - Phương thức này thực hiện 3 phép kiểm tra điều kiện nghiêm ngặt:
+     + Phép 1: `FirebaseAuth.getInstance().getCurrentUser() != null` (Người dùng đã đăng nhập tài khoản Firebase).
+     + Phép 2: `LocalDataManager.isUserLoggedIn() == true` (Trạng thái session cục bộ là đăng nhập).
+     + Phép 3: `LocalDataManager.hasValidKeyLoaded() == true` (Trong EncryptedSharedPreferences phải tồn tại cả `x25519_private_key` và `ed25519_private_key`).
+3. Điều hướng người dùng:
+   - Nếu thỏa mãn cả 3 điều kiện: Phiên làm việc hợp lệ và Private Key đã sẵn sàng -> Mở `ChungActivity` (Màn hình chính) và đóng `ChoActivity`.
+   - Nếu thiếu bất kỳ điều kiện nào (chưa đăng nhập, hoặc đăng nhập rồi nhưng chưa nạp/mở khóa Private Keys bằng Recovery Code) -> Mở `DangNhapActivity`.
+
+====================================================================================================
+2. LUỒNG ĐĂNG KÝ TÀI KHOẢN (ZERO-KNOWLEDGE REGISTRATION)
+====================================================================================================
+- Thành phần: DangKyActivity -> DangKyViewModel -> AuthRepository -> CryptoManager -> FirebaseAuthSource & FirestoreDataSource.
+- Nguyên lý: Kiến trúc Không tin cậy máy chủ (Zero-Knowledge). Server Firebase lưu thông tin và gói khóa nhưng KHÔNG BAO GIỜ biết Private Key thô hay Recovery Code của người dùng.
+
+Các bước thực thi:
+1. Nhập liệu:
+   - Người dùng nhập: Họ và tên, Email, Mật khẩu và Mã khôi phục (Recovery Code - tối thiểu 6 ký tự).
+2. Xử lý tại DangKyViewModel & AuthRepository:
+   - Kiểm tra tính hợp lệ dữ liệu (Email đúng định dạng, mật khẩu >= 6 ký tự, mã khôi phục không để trống).
+   - Đưa tác vụ nặng vào `ExecutorService` (luồng nền) để không gây giật lag giao diện.
+3. Sinh cặp khóa mật mã (CryptoManager):
+   - Sinh cặp khóa trao đổi bí mật X25519 (ECDH KeyPair: Private Key 32 bytes, Public Key 32 bytes).
+   - Sinh cặp khóa ký điện tử Ed25519 (EdDSA KeyPair: Private Key 32 bytes seed, Public Key 32 bytes).
+4. Mã hóa bảo vệ Private Keys (CryptoManager.encryptKeyBundle):
+   - Ghép 2 Private Key thành mảng byte thô: `rawPrivateKeys = [x25519_private (32B) + ed25519_private (32B)]` (tổng 64 bytes).
+   - Sinh một Salt ngẫu nhiên bảo mật 16 bytes (`SecureRandom`).
+   - Dẫn xuất khóa mã hóa AES-256 từ `Recovery Code` và `Salt` qua thuật toán PBKDF2 (`PBKDF2WithHmacSHA256`) chạy đúng 100.000 vòng lặp.
+   - Sinh một IV ngẫu nhiên 12 bytes.
+   - Dùng AES-256-GCM để mã hóa mảng 64 bytes Private Keys cùng Authentication Tag 16 bytes.
+   - Đóng gói toàn bộ thành chuỗi nhị phân chuẩn định dạng KeyBundle:
+     `[Salt (16 bytes) | IV (12 bytes) | Ciphertext + AuthTag (80 bytes)]` (Tổng cộng 108 bytes).
+   - Mã hóa toàn bộ KeyBundle thành chuỗi Base64.
+5. Tạo tài khoản Firebase & Lưu trữ đám mây:
+   - Gọi `FirebaseAuth.createUserWithEmailAndPassword(email, password)` để lấy `uid`.
+   - Lấy FCM Token thiết bị hiện tại (`FirebaseMessaging.getInstance().getToken()`).
+   - Tạo đối tượng `User` gồm: {uid, email, fullName, avatarUrl: "", publicKeyX25519 (Base64), publicKeyEd25519 (Base64), encryptedKeyBundle (Base64), fcmToken, createdAt}.
+   - Ghi document người dùng vào collection `users/{uid}` trên Cloud Firestore.
+6. Lưu trữ trên thiết bị nội bộ:
+   - Nạp các thông tin session và 2 Private Key dạng Base64 vào `EncryptedSharedPreferences` qua `LocalDataManager.saveSession(...)`.
+7. Thông báo và điều hướng:
+   - Báo thành công, chuyển hướng người dùng thẳng vào `ChungActivity`.
+
+====================================================================================================
+3. LUỒNG ĐĂNG NHẬP & BÓC TÁCH KHÓA BẢO MẬT (LOGIN & KEY EXTRACTION)
+====================================================================================================
+- Thành phần: DangNhapActivity -> DangNhapViewModel -> AuthRepository -> CryptoManager -> LocalDataManager.
+- Mục đích: Xác thực danh tính với Firebase Auth, kéo gói khóa mã hóa từ Firestore về và dùng Recovery Code để giải mã Private Keys ngay trên điện thoại.
+
+Các bước thực thi:
+1. Nhập liệu:
+   - Người dùng nhập: Email, Mật khẩu tài khoản và Mã khôi phục (Recovery Code) đã đặt khi đăng ký.
+2. Xác thực Firebase Auth:
+   - Gọi `FirebaseAuth.signInWithEmailAndPassword(email, password)`. Nếu sai tài khoản/mật khẩu, Firebase trả lỗi ngay.
+3. Kéo gói khóa từ Firestore:
+   - Khi Auth thành công, lấy `uid` người dùng và truy vấn Firestore: `db.collection("users").document(uid).get()`.
+   - Đọc trường `encryptedKeyBundle` (chuỗi Base64) và các thông tin cá nhân (`fullName`, `avatarUrl`).
+4. Bóc tách và Giải mã Private Keys (CryptoManager.decryptKeyBundle):
+   - Giải mã chuỗi Base64 của KeyBundle thành mảng byte thô:
+     + Byte 0..15 (16 bytes): Trích xuất `Salt`.
+     + Byte 16..27 (12 bytes): Trích xuất `IV`.
+     + Byte 28..hết: Trích xuất `Ciphertext + AuthTag`.
+   - Tái tạo khóa dẫn xuất AES-256 từ `Recovery Code` người dùng vừa nhập và `Salt` trích xuất thông qua PBKDF2 (100.000 vòng lặp).
+   - Khởi tạo `Cipher.getInstance("AES/GCM/NoPadding")` với chế độ DECRYPT, truyền IV và khóa dẫn xuất.
+   - Thực hiện giải mã và xác thực tính toàn vẹn (Authentication Tag):
+     + Nếu Recovery Code sai: Quá trình giải mã GCM thất bại (ném ngoại lệ `AEADBadTagException`).
+     + Giao diện hiển thị: "Mã khôi phục không đúng! Không thể mở khóa Private Key." và dừng lại, bảo vệ tuyệt đối dữ liệu.
+     + Nếu Recovery Code đúng: Giải mã ra mảng 64 bytes ban đầu.
+       * Byte 0..31: Phục hồi `x25519PrivateKey`.
+       * Byte 32..63: Phục hồi `ed25519PrivateKey`.
+5. Cập nhật thiết bị và FCM Token:
+   - Lưu trạng thái đăng nhập, thông tin người dùng và 2 Private Key đã giải mã an toàn vào `EncryptedSharedPreferences`.
+   - Lấy FCM Token hiện tại của máy và cập nhật lên document `users/{uid}` trên Firestore để đảm bảo nhận được thông báo tin nhắn.
+6. Hoàn tất đăng nhập:
+   - Chuyển hướng người dùng vào màn hình chính `ChungActivity`.
+
+====================================================================================================
+4. LUỒNG QUÊN MẬT KHẨU (FORGOT PASSWORD)
+====================================================================================================
+- Thành phần: ForgotPasswordActivity -> FirebaseAuth.
+- Các bước thực thi:
+  1. Người dùng nhập email đã đăng ký tài khoản và nhấn "Gửi liên kết đặt lại mật khẩu".
+  2. Ứng dụng kiểm tra cú pháp email hợp lệ qua `Patterns.EMAIL_ADDRESS`.
+  3. Gọi trực tiếp `FirebaseAuth.getInstance().sendPasswordResetEmail(email)`.
+  4. Firebase gửi một đường link đặt lại mật khẩu an toàn vào hòm thư của người dùng.
+  5. Ứng dụng hiển thị thông báo hướng dẫn người dùng kiểm tra email và quay trở lại màn hình đăng nhập.
+  * Lưu ý bảo mật: Mật khẩu Firebase chỉ dùng để xác thực phiên. Mã khôi phục (Recovery Code) là độc lập để bảo vệ Private Keys, không thể đặt lại qua email này để đảm bảo nguyên lý Zero-Knowledge.
+
+====================================================================================================
+5. LUỒNG TÌM KIẾM, GỬI LỜI MỜI & CHẤP NHẬN KẾT BẠN (KEY AGREEMENT / ECDH)
+====================================================================================================
+- Thành phần: FriendsActivity -> FriendsViewModel -> FriendRepository -> FriendRemoteDataSource -> CryptoManager -> LocalDataManager.
+- Mục đích: Thiết lập quan hệ bạn bè và tự động tính toán Khóa bí mật dùng chung (Shared Secret ECDH) giữa 2 người mà không bên thứ 3 nào biết được.
+
+5.1. Luồng Tìm kiếm người dùng:
+1. Người dùng mở màn hình Bạn bè (`FriendsActivity`), bấm nút Thêm bạn và nhập email của đối phương.
+2. `FriendsViewModel.searchUserByEmail(email)` truy vấn Firestore tìm document trong `users` có `email == targetEmail`.
+3. Trả về thông tin đối phương (tên, email, avatar, public keys) hiển thị lên giao diện hộp thoại kết bạn.
+
+5.2. Luồng Gửi lời mời kết bạn (A gửi cho B):
+1. Người dùng A nhấn nút "Gửi lời mời".
+2. Kiểm tra các điều kiện an toàn: Không cho phép tự kết bạn với chính mình, kiểm tra xem hai người đã là bạn chưa.
+3. Tạo document trong collection `friend_requests` với cấu trúc:
+   {requestId, senderId: uid_A, senderName: name_A, receiverId: uid_B, status: "PENDING", timestamp}.
+4. Firestore ghi dữ liệu thành công -> Báo "Đã gửi lời mời kết bạn".
+
+5.3. Luồng Nhận và Chấp nhận kết bạn (B chấp nhận A) - ĐIỂM CỐT LÕI TRAO ĐỔI KHÓA ECDH:
+1. Màn hình của B lắng nghe realtime các lời mời gửi đến B có status == "PENDING" (`friend_requests` query `receiverId == uid_B`).
+2. Giao diện của B hiển thị thông báo/card lời mời kết bạn từ A.
+3. Người dùng B nhấn nút "Chấp nhận" (`acceptFriendRequest`):
+   - Bước a: B cập nhật trạng thái của document `friend_requests/{requestId}` thành `ACCEPTED`.
+   - Bước b: Thực hiện trao đổi khóa Diffie-Hellman (ECDH) trên máy B (`FriendRepository.performKeyExchange`):
+     + Lấy `myPrivateKeyX25519` của B từ `LocalDataManager`.
+     + Lấy `peerPublicKeyX25519` của A từ Firestore document.
+     + Gọi `CryptoManager.computeSharedSecretECDH(myPrivateKey, peerPublicKey)`:
+       Sử dụng thuật toán X25519 tính ra chuỗi bí mật chung: `SharedSecret = X25519(Private_B, Public_A)`.
+     + Lưu chuỗi bí mật này vào `EncryptedSharedPreferences` với key: `shared_key_{uid_A}`.
+   - Bước c: Tạo quan hệ bạn bè 2 chiều trên Cloud Firestore bằng `WriteBatch`:
+     + Tạo document `users/{uid_B}/friends/{uid_A}` chứa thông tin của A (kèm public keys).
+     + Tạo document `users/{uid_A}/friends/{uid_B}` chứa thông tin của B (kèm public keys).
+     + Đặt cờ `isKeyExchanged = true` và `sharedKeyAlias = "shared_key_{partnerId}"`.
+   - Bước d: Đồng thời, khi A vào app hoặc lắng nghe sự kiện bạn bè mới, máy của A cũng tự động lấy Public Key X25519 của B để tính toán:
+     `SharedSecret = X25519(Private_A, Public_B)`.
+     Theo nguyên lý toán học đường cong Elliptic X25519: `X25519(Private_B, Public_A) == X25519(Private_A, Public_B)`.
+     Cả A và B lúc này sở hữu CÙNG MỘT chuỗi SharedSecret 32 bytes mà Server Firebase KHÔNG THỂ BIẾT ĐƯỢC.
+
+====================================================================================================
+6. LUỒNG ĐỒNG BỘ BẠN BÈ VÀ HỘI THOẠI (SYNC FRIENDS & CONVERSATIONS)
+====================================================================================================
+- Thành phần: ChungViewModel, ProfileViewModel -> FriendRepository -> ConversationDao (Room DB).
+- Mục đích: Đảm bảo danh bạ bạn bè trên máy cục bộ luôn khớp với Firestore; tự động tạo các bản ghi hội thoại trong Room để hiển thị ngay trên màn hình chính (`ChungActivity`).
+
+Các bước thực thi:
+1. Tự động kích hoạt:
+   - Khi người dùng vào `ChungActivity`, `ChungViewModel` thiết lập `friendsListener` lắng nghe collection `users/{uid}/friends`.
+   - Hoặc người dùng bấm nút "Đồng bộ bạn bè & tin nhắn" tại `ProfileActivity`.
+2. Truy xuất dữ liệu bạn bè từ Firestore:
+   - Lấy toàn bộ danh sách bạn bè từ subcollection `friends`.
+3. Kiểm tra và bổ sung Khóa ECDH còn thiếu:
+   - Với mỗi người bạn, kiểm tra xem máy đã lưu `shared_key_{friendId}` chưa.
+   - Nếu chưa có (ví dụ đổi máy hoặc vừa được người khác chấp nhận): Gọi `performKeyExchange` để tính toán ngay và lưu vào `LocalDataManager`.
+4. Cập nhật bảng `conversations` trong Room DB:
+   - Với mỗi người bạn, kiểm tra xem trong bảng `conversations` cục bộ đã có bản ghi chưa.
+   - Nếu chưa có: Tạo bản ghi `ConversationEntity` mới với ID chuẩn hóa `getChatId(myUid, friendId)` (ghép 2 UID theo thứ tự bảng chữ cái alphabet), tên bạn bè, avatar và tin nhắn mặc định "Chưa có tin nhắn nào".
+   - Nếu đã có: Cập nhật lại tên hiển thị hoặc avatar mới nhất của bạn bè nếu có thay đổi.
+5. Hiển thị UI:
+   - Bảng `conversations` của Room phát tín hiệu qua `LiveData<List<ConversationEntity>>`.
+   - `ChungActivity` nhận danh sách qua `ConversationAdapter` và hiển thị trực tiếp lên `RecyclerView`.
+
+====================================================================================================
+7. LUỒNG NHẮN TIN 1-1 BẢO MẬT E2EE (KDF CHAIN RATCHET / FORWARD SECRECY)
+====================================================================================================
+- Thành phần: ChatActivity -> ChatViewModel -> ChatRepository -> RatchetManager -> Room DB & Firestore.
+- Cơ chế: Thuật toán KDF Chain Ratchet (HMAC-SHA256) xoay khóa liên tục mỗi tin nhắn, mã hóa đối xứng AES-256-GCM, xác thực danh tính và chống giả mạo bằng Chữ ký số Ed25519.
+
+7.1. Luồng Gửi tin nhắn (Sender Flow):
+1. Khởi tạo phiên Ratchet (nếu chưa có trong Room DB):
+   - ID phòng chat được chuẩn hóa: `conversationId = uid1.compareTo(uid2) < 0 ? uid1 + "_" + uid2 : uid2 + "_" + uid1`.
+   - Kiểm tra `ratchetSessionDao.getSession(conversationId)`.
+   - Nếu là tin nhắn đầu tiên (chưa có session):
+     + Lấy `SharedSecret` ECDH giữa 2 người từ `LocalDataManager`.
+     + Dẫn xuất 2 chuỗi khóa KDF ban đầu qua HMAC-SHA256:
+       `sendChainKey` và `recvChainKey`.
+       (Để tránh xung đột, bên có UID nhỏ hơn theo alphabet sẽ lấy chuỗi 1 làm sendChainKey, chuỗi 2 làm recvChainKey; bên UID lớn hơn sẽ đảo ngược lại).
+     + Lưu phiên khởi tạo vào bảng `ratchet_sessions` với `keyIndex = 0`.
+2. Xoay khóa Ratchet và Mã hóa tin nhắn (`RatchetManager.encryptMessage`):
+   - Bước a: Thực hiện 1 bước nhảy KDF (`stepKdfChain`):
+     + Dùng HMAC-SHA256 với khóa `sendChainKey`:
+       * `MessageKey = HMAC(sendChainKey, 0x01)` (Khóa AES-256 32 bytes dùng riêng cho duy nhất tin nhắn này).
+       * `nextChainKey = HMAC(sendChainKey, 0x02)` (Khóa chuỗi tiếp theo).
+     + Cập nhật ngay `sendChainKey = nextChainKey` và tăng `keyIndex`.
+   - Bước b: Mã hóa nội dung tin nhắn:
+     + Sinh ngẫu nhiên một vector khởi tạo `IV` 12 bytes (`SecureRandom`).
+     + Mã hóa văn bản UTF-8 bằng `AES-256-GCM` (với Authentication Tag 128-bit/16 bytes).
+     + Trả về `Ciphertext` đã mã hóa.
+   - Bước c: Ký chữ ký điện tử Ed25519 (Digital Signature):
+     + Tạo dữ liệu xác thực: Ghép mảng byte `[Ciphertext + IV + keyIndex]`.
+     + Dùng `ed25519PrivateKey` của người gửi để ký số lên mảng dữ liệu này qua thuật toán Ed25519 (EdDSA).
+     + Chữ ký số đảm bảo: Người nhận xác thực được đúng là bạn gửi, tin nhắn không bị kẻ trung gian sửa đổi bất kỳ byte nào.
+   - Bước d: XÓA SẠCH VẾT KHÓA TRÊN RAM (Forward Secrecy):
+     + Điền số 0 (`Arrays.fill(messageKey, (byte) 0)`) vào mảng byte của `MessageKey` trong bộ nhớ RAM ngay sau khi mã hóa xong. 
+     + Nếu sau này thiết bị bị kẻ gian xâm nhập, kẻ tấn công cũng không thể khôi phục lại các MessageKey của những tin nhắn đã qua.
+3. Đóng gói payload truyền mạng (`EncryptedMessagePayload`):
+   - Đóng gói gồm: {messageId, ciphertext (Base64), iv (Base64), signature (Base64), keyIndex, senderId, receiverId, timestamp}.
+4. Lưu trữ cục bộ & Cập nhật giao diện:
+   - Lưu tin nhắn vào bảng `messages` của Room Database với trạng thái `SENT`, nội dung là chuỗi văn bản gốc (để hiển thị offline ngay lập tức cho người gửi).
+   - Cập nhật bảng `conversations` (tin nhắn cuối, thời gian).
+5. Đẩy lên Cloud Firestore:
+   - Ghi document vào: `chats/{conversationId}/messages/{messageId}`.
+   - Cập nhật document cha `chats/{conversationId}` với `{lastSenderId, lastUpdated}`.
+
+7.2. Luồng Nhận và Giải mã tin nhắn Realtime (Receiver Flow):
+1. Lắng nghe Firestore Realtime:
+   - `ChatRepository` đăng ký listener: `chats/{conversationId}/messages` với `limitToLast(50)`.
+2. Khi có document mới xuất hiện (`DocumentChange.Type.ADDED`):
+   - Kiểm tra `senderId`: Nếu `senderId == myUid` (chính mình gửi) thì bỏ qua vì Room đã có bản ghi này.
+   - Nếu là tin nhắn từ đối phương gửi đến:
+3. Kiểm tra trùng lặp trong Room DB:
+   - Truy vấn `messageDao.getMessageById(messageId)`. Nếu tin nhắn đã được lưu và giải mã trước đó, bỏ qua để tránh xử lý lặp.
+4. Xác thực và Giải mã (`RatchetManager.decryptMessage`):
+   - Bước a: Xác thực Chữ ký số Ed25519:
+     + Lấy Public Key Ed25519 của đối phương (`peerEd25519PublicKey`).
+     + Ghép dữ liệu kiểm tra: `[Ciphertext + IV + keyIndex]`.
+     + Dùng `Ed25519Signer` kiểm tra `signature` đi kèm:
+       * Nếu chữ ký KHÔNG HỢP LỆ: Hủy tin nhắn ngay lập tức, ghi log cảnh báo tấn công giả mạo (Man-In-The-Middle / Spoofing).
+       * Nếu chữ ký HỢP LỆ: Chuyển sang bước giải mã.
+   - Bước b: Đồng bộ bước nhảy KDF Ratchet phía nhận:
+     + Đọc `recvChainKey` hiện tại từ `ratchetSessionDao`.
+     + Bước nhảy KDF phía nhận tính:
+       * `MessageKey = HMAC(recvChainKey, 0x01)`.
+       * `nextChainKey = HMAC(recvChainKey, 0x02)`.
+     + Cập nhật `recvChainKey = nextChainKey` lưu vào Room DB.
+   - Bước c: Giải mã AES-256-GCM:
+     + Sử dụng `MessageKey` và `IV` 12 bytes để giải mã bản mã `Ciphertext`.
+     + Xác thực tính toàn vẹn qua Authentication Tag.
+     + Thu được chuỗi văn bản gốc UTF-8 `plainText`.
+   - Bước d: Xóa sạch `MessageKey` trên RAM bằng `Arrays.fill(messageKey, (byte)0)`.
+5. Lưu bản tin rõ vào Room Database:
+   - Thêm bản ghi vào bảng `messages` (nội dung `messageText` đã giải mã, `isSentByMe = false`, `status = "READ"`).
+   - Cập nhật bảng `conversations` (tin nhắn cuối, thời gian).
+6. Tự động hiển thị lên màn hình:
+   - `MessageDao` trả về `LiveData<List<MessageEntity>>`. 
+   - `ChatViewModel` và `ChatActivity` quan sát LiveData sẽ tự động nhận dữ liệu mới, `MessageAdapter` cập nhật danh sách và cuộn mượt mà xuống đáy màn hình.
+
+====================================================================================================
+8. LUỒNG THÔNG BÁO ĐẨY FCM (PUSH NOTIFICATION - FUNCTIONS NODE.JS & CLIENT)
+====================================================================================================
+- Thành phần: Node.js Backend Server (`functions/index.js`) -> Firebase Cloud Messaging (FCM) -> Android Client (`FcmNotificationService`).
+- Mục đích: Đánh thức ứng dụng và hiển thị thông báo đẩy ngay cả khi người dùng đang tắt app hoặc ở ngoài màn hình chat.
+
+Các bước thực thi:
+1. Server Node.js lắng nghe Firestore:
+   - File `functions/index.js` chạy ngầm, sử dụng Firebase Admin SDK kết nối qua `service-account.json`.
+   - Đăng ký lắng nghe toàn cục: `db.collectionGroup("messages").onSnapshot(...)`.
+2. Khi có tin nhắn mới được ghi vào Firestore:
+   - Server bắt sự kiện document mới được thêm vào (`change.type === "added"`).
+   - Lọc bỏ các tin nhắn cũ tồn tại trước thời điểm server khởi động (`timestamp <= serverStartTime`).
+   - Lấy `receiverId` và `senderId` từ dữ liệu tin nhắn.
+3. Tìm kiếm Token người nhận và Tên người gửi:
+   - Truy vấn `users/{receiverId}` để lấy trường `fcmToken`. Nếu người nhận chưa có token, bỏ qua.
+   - Truy vấn `users/{senderId}` để lấy `fullName` của người gửi.
+4. Gửi Push Notification qua FCM API:
+   - Đóng gói tin nhắn FCM dạng `data payload`:
+     {
+       data: {
+         senderId: senderId,
+         senderName: senderName,
+         title: senderName,
+         body: "Bạn có một tin nhắn mới"   <-- BẢO MẬT: Tuyệt đối không gửi nội dung tin nhắn thô qua FCM để tránh lộ dữ liệu trên máy chủ trung gian
+       },
+       token: fcmToken
+     }
+   - Gọi `admin.messaging().send(payload)`.
+5. Xử lý trên điện thoại người nhận (`FcmNotificationService`):
+   - Khi thiết bị nhận tín hiệu từ FCM, hàm `onMessageReceived(RemoteMessage remoteMessage)` được kích hoạt.
+   - Kiểm tra thông minh: Nếu người dùng đang mở đúng màn hình chat với người gửi này (`senderId.equals(currentActivePartnerId)`), Service sẽ KHÔNG hiển thị thông báo để tránh làm phiền.
+   - Nếu người dùng đang ở ngoài hoặc tắt app:
+     + Tạo `NotificationChannel` (trên Android 8.0 trở lên).
+     + Xây dựng thông báo với `NotificationCompat.Builder`: Icon app, tiêu đề là tên người gửi, nội dung "Bạn có một tin nhắn mới".
+     + Gắn `PendingIntent` mở `ChungActivity` khi người dùng nhấn vào thông báo.
+     + Gọi `NotificationManager.notify(...)` để rung và hiển thị banner thông báo trên màn hình thiết bị.
+
+====================================================================================================
+9. LUỒNG QUẢN LÝ TRANG CÁ NHÂN & ĐỔI MẬT KHẨU (PROFILE & SECURITY)
+====================================================================================================
+- Thành phần: ProfileActivity -> ProfileViewModel -> ProfileRepository -> Firestore & Firebase Auth.
+
+9.1. Luồng Đổi Họ và Tên:
+1. Người dùng sửa lại họ tên trong ô EditText và bấm "Lưu thay đổi".
+2. `ProfileRepository.updateFullName` gọi Firestore cập nhật trường `fullName` trong document `users/{uid}`.
+3. Cập nhật giá trị mới vào `EncryptedSharedPreferences` qua `LocalDataManager.setFullName(...)`.
+4. Báo thành công và cập nhật UI.
+
+9.2. Luồng Cập nhật Ảnh đại diện (Avatar):
+1. Người dùng bấm vào khung ảnh đại diện, chọn một ảnh từ thư viện thiết bị.
+2. Ứng dụng tích hợp thư viện `UCrop` để cắt ảnh theo tỷ lệ vuông chuẩn 1:1.
+3. Xử lý tối ưu dung lượng:
+   - Nén ảnh Bitmap thành định dạng JPEG với chất lượng nén tối ưu (quality 80) hoặc kích thước nhỏ gọn.
+   - Chuyển toàn bộ byte ảnh sang chuỗi `Base64` an toàn.
+4. Lưu trực tiếp chuỗi Base64 này vào trường `avatarUrl` trong document `users/{uid}` trên Firestore và cập nhật `LocalDataManager`.
+5. `AvatarHelper` chịu trách nhiệm giải mã chuỗi Base64, bo tròn ảnh hiển thị mượt mà mà không phụ thuộc vào dịch vụ lưu trữ ngoài.
+
+9.3. Luồng Đổi mật khẩu tài khoản:
+1. Người dùng nhập: Mật khẩu hiện tại, Mật khẩu mới và Nhập lại mật khẩu mới.
+2. Kiểm tra xác thực lại danh tính (Re-authentication):
+   - Gọi `FirebaseAuth.reauthenticate(EmailAuthProvider.getCredential(email, currentPassword))`.
+   - Đảm bảo đúng chủ tài khoản đang thao tác, ngăn chặn người lạ cầm máy tự ý đổi pass.
+3. Khi xác thực mật khẩu cũ thành công:
+   - Gọi `FirebaseUser.updatePassword(newPassword)`.
+   - Cập nhật mật khẩu mới trên máy chủ Firebase Auth.
+
+====================================================================================================
+10. LUỒNG ĐĂNG XUẤT AN TOÀN (SECURE LOGOUT / KEY PURGE)
+====================================================================================================
+- Thành phần: ProfileActivity -> ProfileViewModel -> ProfileRepository -> LocalDataManager -> AppDatabase -> DangNhapActivity.
+- Nguyên lý: Đảm bảo nguyên tắc bảo mật tối cao trên thiết bị di động - Xóa sạch toàn bộ khóa bí mật và cơ sở dữ liệu khi kết thúc phiên.
+
+Các bước thực thi:
+1. Người dùng nhấn nút "Đăng xuất" tại màn hình Profile.
+2. Hiển thị hộp thoại xác nhận: Cảnh báo người dùng phải nhớ Mã khôi phục (Recovery Code) để có thể giải mã tin nhắn khi đăng nhập lại.
+3. Khi người dùng xác nhận Đăng xuất:
+   - Bước 1: Xóa thông tin xác thực trên đám mây: Gọi `FirebaseAuth.getInstance().signOut()`.
+   - Bước 2: Xóa sạch dữ liệu trong `EncryptedSharedPreferences`:
+     + Xóa toàn bộ session: `uid`, `email`, `fullName`, `avatarUrl`.
+     + Xóa Private Key X25519 (`x25519_private_key`).
+     + Xóa Private Key Ed25519 (`ed25519_private_key`).
+     + Xóa toàn bộ các khóa bí mật dùng chung bạn bè (`shared_key_*`).
+     + Gọi `securePrefs.edit().clear().apply()`.
+   - Bước 3: Dọn sạch cơ sở dữ liệu cục bộ Room Database (`diskExecutor` luồng nền):
+     + Xóa sạch bảng tin nhắn: `messageDao.deleteAllMessages()`.
+     + Xóa sạch bảng hội thoại: `conversationDao.deleteAllConversations()`.
+     + Xóa sạch bảng chuỗi khóa xoay: `ratchetSessionDao.deleteAllSessions()`.
+   - Bước 4: Điều hướng giao diện:
+     + Khởi chạy `DangNhapActivity` với cờ `FLAG_ACTIVITY_NEW_TASK | FLAG_ACTIVITY_CLEAR_TASK` để xóa sạch toàn bộ ngăn xếp Activity (Stack).
+     + Người dùng hoàn toàn thoát khỏi ứng dụng về màn hình đăng nhập, không thể bấm Back để quay lại màn hình trước.
+
+====================================================================================================
+11. BẢNG TỔNG HỢP KIẾN TRÚC MẬT MÃ & LƯU TRỮ TRONG HỆ THỐNG
+====================================================================================================
+
++----------------------------+---------------------------------------+--------------------------------------------------------+
+| Vị trí / Thành phần        | Công nghệ / Thuật toán sử dụng        | Vai trò & Ý nghĩa kỹ thuật                             |
++----------------------------+---------------------------------------+--------------------------------------------------------+
+| Cặp khóa trao đổi bí mật  | X25519 (ECDH - Curve25519)            | Thiết lập khóa bí mật dùng chung (Shared Secret)       |
+| Cặp khóa ký danh tính      | Ed25519 (EdDSA - Edwards Curve)       | Ký số và xác thực tính toàn vẹn, chống giả mạo danh tính|
+| Dẫn xuất khóa khôi phục    | PBKDF2WithHmacSHA256 (100.000 vòng)  | Dẫn xuất khóa AES-256 an toàn từ Recovery Code + Salt  |
+| Đóng gói KeyBundle         | AES-256-GCM (IV 12B, Tag 16B)         | Bảo vệ 2 Private Keys đẩy lên server theo Zero-Knowledge|
+| Xoay khóa tin nhắn         | KDF Chain Ratchet (HMAC-SHA256)       | Forward Secrecy: Mỗi tin nhắn một khóa riêng biệt       |
+| Mã hóa tin nhắn            | AES-256-GCM                           | Bảo mật nội dung tin nhắn và xác thực chống can thiệp   |
+| Bộ nhớ an toàn trên máy    | Android EncryptedSharedPreferences    | Lưu trữ session và Private Keys mã hóa cấp độ phần cứng |
+| Cơ sở dữ liệu offline      | Room Database (SQLite)                | Lưu trữ tin nhắn và cuộc trò chuyện đã giải mã cục bộ  |
+| Cơ sở dữ liệu đám mây      | Cloud Firestore Realtime              | Lưu trữ bản mã, gói khóa và đồng bộ thời gian thực     |
+| Thông báo đẩy ngầm         | Node.js Cloud Functions + FCM         | Đánh thức thiết bị nhận tin nhắn mà không lộ nội dung  |
++----------------------------+---------------------------------------+--------------------------------------------------------+
+====================================================================================================
+

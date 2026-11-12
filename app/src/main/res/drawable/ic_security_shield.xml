@@ -1,0 +1,28 @@
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="24dp"
+    android:height="24dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+
+    <!-- Viền khiên nở rộng bề ngang, bo tròn đáy cân đối -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M12,3
+                         L4.5,6
+                         C4.5,13.2 7.8,18.8 12,20.8
+                         C16.2,18.8 19.5,13.2 19.5,6
+                         L12,3 Z" />
+
+    <!-- Dấu tick nằm giữa tâm khiên -->
+    <path
+        android:fillColor="@android:color/transparent"
+        android:strokeColor="#FFFFFF"
+        android:strokeWidth="1.8"
+        android:strokeLineCap="round"
+        android:strokeLineJoin="round"
+        android:pathData="M8.8,11.8 L10.8,13.8 L15.2,9.4" />
+</vector>

@@ -1,0 +1,125 @@
+====================================================================================================
+                        SAFECHAT - BẢN TÓM TẮT DỰ ÁN & TIẾN ĐỘ HOÀN THÀNH
+                          (TÀI LIỆU DÙNG CHO CONTEXT VIBE CODE / PROMPTING)
+====================================================================================================
+
+I. TỔNG QUAN DỰ ÁN
+- Tên dự án: SafeChat (Ứng dụng nhắn tin bảo mật mã hóa đầu cuối - End-to-End Encryption E2EE).
+- Nền tảng: Android Native (Java 17/21, SDK Compile 35, Min SDK 26).
+- Kiến trúc phần mềm: MVVM (Model - View - ViewModel) + Repository Pattern.
+- Hệ thống lưu trữ kép (Dual Database):
+  + Local DB: Room Database (SQLite) + EncryptedSharedPreferences (Bảo vệ Private Keys).
+  + Remote DB: Firebase (Authentication, Cloud Firestore Realtime, Firebase Storage).
+- Thư viện mật mã cốt lõi: Bouncy Castle (`bcprov-jdk18on:1.78.1`), Java Cryptography Architecture (JCA).
+
+----------------------------------------------------------------------------------------------------
+II. HỆ MẬT MÃ & NGUYÊN LÝ HOẠT ĐỘNG ĐÃ TRIỂN KHAI
+
+1. Kiến trúc Xác thực Zero-Knowledge:
+   - Server Firebase không bao giờ biết Private Keys hay Passphrase/Recovery Code của người dùng.
+   - Khi Đăng ký: Sinh 2 cặp khóa (X25519 & Ed25519). Dẫn xuất khóa AES-256 từ Mã khôi phục (Recovery Code) qua PBKDF2WithHmacSHA256 (100.000 vòng lặp, salt 16 bytes ngẫu nhiên). Đóng gói Private Keys bằng AES-256-GCM thành `encryptedKeyBundle` đẩy lên Firestore.
+   - Khi Đăng nhập: Kéo `encryptedKeyBundle` về, giải mã bằng Recovery Code ngay trên máy để nạp Private Keys vào `EncryptedSharedPreferences`.
+
+2. Hai Cặp Khóa Độc Lập:
+   - Cặp khóa X25519: Dùng riêng cho trao đổi khóa bí mật dùng chung qua Diffie-Hellman (ECDH).
+   - Cặp khóa Ed25519: Dùng riêng cho Ký số (Digital Signature) và Xác thực tính toàn vẹn, chống giả mạo danh tính tin nhắn.
+
+3. Trao Đổi Khóa Bạn Bè (Key Agreement):
+   - Khi chấp nhận kết bạn: Máy tự tính toán ECDH: `SharedSecret = X25519(My_PrivateKey, Peer_PublicKey)`.
+   - Lưu chuỗi bí mật này vào bộ nhớ an toàn máy dưới alias: `shared_key_{partnerId}`.
+
+4. Cơ Chế Xoay Khóa Chat 1-1 (KDF Chain Ratchet / Forward Secrecy):
+   - Không dùng 1 khóa cố định cho toàn bộ cuộc trò chuyện.
+   - Khởi tạo 2 chuỗi khóa KDF (HMAC-SHA256): `sendChainKey` và `recvChainKey` dựa trên SharedSecret và thứ tự so sánh UID.
+   - Mỗi lần gửi tin nhắn: KDF Chain bước 1 bước để sinh ra `MessageKey` (32 bytes AES-256) và `nextChainKey`.
+   - Mã hóa tin nhắn bằng AES-256-GCM (IV 12 bytes ngẫu nhiên, AuthTag 16 bytes).
+   - Ký chữ ký điện tử Ed25519 lên gói: `Ciphertext + IV + KeyIndex`.
+   - Xóa ngay `MessageKey` khỏi RAM sau khi mã hóa/giải mã để đảm bảo Forward Secrecy.
+
+----------------------------------------------------------------------------------------------------
+III. CẤU TRÚC CƠ SỞ DỮ LIỆU ĐÃ TRIỂN KHAI
+
+1. Cloud Firestore:
+   - `users/{uid}`: {uid, fullName, email, avatarUrl, publicKeyX25519, publicKeyEd25519, encryptedKeyBundle, createdAt}
+   - `users/{uid}/friends/{friendId}`: {uid, fullName, email, avatarUrl, publicKeyX25519, publicKeyEd25519, isKeyExchanged, sharedKeyAlias}
+   - `friend_requests/{requestId}`: {requestId, senderId, senderName, receiverId, status ("PENDING"|"ACCEPTED"|"DECLINED"), timestamp, acceptedAt}
+   - `chats/{chatId}`: {participants: [uid1, uid2], lastSenderId, lastUpdated}
+   - `chats/{chatId}/messages/{messageId}`: {ciphertext, iv, signature, keyIndex, senderId, receiverId, timestamp}
+
+2. Local Room Database (`AppDatabase` - Version 1):
+   - Bảng `messages`: messageId (PK), conversationId, senderId, receiverId, messageText (đã giải mã), timestamp, isSentByMe, status ("PENDING"|"SENT"|"DELIVERED"|"READ").
+   - Bảng `conversations`: conversationId (PK), partnerId, partnerName, partnerAvatar, lastMessage, lastTimestamp, unreadCount.
+   - Bảng `ratchet_sessions`: conversationId (PK), rootKey, sendChainKey, recvChainKey, currentKeyIndex.
+
+3. EncryptedSharedPreferences (`LocalDataManager`):
+   - Lưu session: `is_logged_in`, `uid`, `email`, `full_name`, `avatar_url`.
+   - Lưu tạm Private Keys máy hiện hành: `x25519_private_key`, `ed25519_private_key`.
+   - Lưu các Shared Secret ECDH bạn bè: `shared_key_{partnerId}`.
+
+----------------------------------------------------------------------------------------------------
+IV. CÁC MÀN HÌNH VÀ THÀNH PHẦN ĐÃ HOÀN THÀNH (FILE CODE CỤ THỂ)
+
+1. Mật Mã & Tiện Ích (`com.example.safechat.crypto`):
+   - `SafeChatApplication.java`: Đăng ký BouncyCastleProvider ưu tiên số 1 khi app khởi động.
+   - `CryptoManager.java`: Sinh khóa X25519/Ed25519, băm PBKDF2, đóng/mở KeyBundle bằng AES-GCM, ECDH X25519, ký/xác thực Ed25519.
+   - `RatchetManager.java`: KDF step HMAC-SHA256, hàm `encryptMessage()` và `decryptMessage()` xoay khóa.
+   - `KeyBundle.java`: Định dạng gói khóa nhị phân mã hóa [Salt (16) + IV (12) + Ciphertext + Tag (16)].
+   - `EncryptedMessagePayload.java`: Gói tin truyền tải qua mạng (ciphertext, iv, signature, keyIndex, senderId, receiverId, timestamp).
+
+2. Quản Lý Dữ Liệu (`com.example.safechat.data`):
+   - `LocalDataManager.java`: Thao tác EncryptedSharedPreferences, quản lý khóa bảo mật trên thiết bị.
+   - `AppDatabase.java`: Room database singleton chứa MessageDao, ConversationDao, RatchetSessionDao.
+   - `FirebaseAuthSource.java`: Đăng nhập, đăng ký, đăng xuất Firebase Auth.
+   - `FirestoreDataSource.java`: Lắng nghe tin nhắn Realtime (`listenNewMessages`), gửi tin nhắn (`sendEncryptedMessage`), quản lý bạn bè và kết bạn đôi chiều (`saveFriendshipBothSides`).
+   - `FirebaseStorageSource.java`: Tải ảnh avatar lên Storage (`avatars/{uid}.jpg`).
+   - `AuthRepository.java`: Đăng ký/đăng nhập Zero-Knowledge, đóng gói/giải mã khóa.
+   - `ProfileRepository.java`: Cập nhật tên, avatar, đổi mật khẩu (re-authenticate), đăng xuất xóa session.
+   - `FriendRepository.java`: Tìm bạn theo email, gửi/nhận lời mời, thực hiện tính ECDH 2 bên (`performKeyExchange`), xóa bạn bè.
+   - `ChatRepository.java`: Lắng nghe tin nhắn Firestore, giải mã & lưu Room DB, gửi tin nhắn mã hóa qua RatchetManager.
+
+3. Giao Diện & ViewModel (`com.example.safechat.ui`):
+   - `ChoActivity.java` (gắn `cho.xml`): Splash screen, kiểm tra phiên làm việc và Private Keys để điều hướng vào `ChungActivity` hoặc `DangNhapActivity`.
+   - `DangKyActivity.java` & `DangKyViewModel.java` (gắn `dangky.xml`): Nhập tên, email, mật khẩu, mã khôi phục -> Đăng ký & sinh gói khóa.
+   - `DangNhapActivity.java` & `DangNhapViewModel.java` (gắn `dangnhap.xml`): Nhập email, mật khẩu, mã khôi phục -> Giải mã Private Keys vào máy.
+   - `ChungActivity.java` & `ChungViewModel.java` (gắn `chung.xml`): Màn hình chính, hiển thị tên user, mở Profile (`btnProfile`), mở Friends (`tabFriends`).
+   - `FriendsActivity.java` & `FriendsViewModel.java` (gắn `friends.xml`, `item_friend.xml`): Danh sách bạn bè, tìm kiếm theo email, chấp nhận lời mời, xóa bạn, nút chat chuyển sang `ChatActivity`.
+   - `FriendAdapter.java`: Hiển thị danh sách bạn bè, bắt sự kiện click chat hoặc xóa bạn.
+   - `ProfileActivity.java` & `ProfileViewModel.java` (gắn `profile.xml`): Xem/sửa tên, chọn ảnh avatar nén upload, đổi mật khẩu an toàn, đăng xuất xóa sạch Private Keys khỏi máy.
+   - `ChatActivity.java` & `ChatViewModel.java` (gắn `chat.xml`, `item_message_sent.xml`, `item_message_received.xml`): Giao diện chat 1-1, lắng nghe tin nhắn Realtime giải mã tự động, cuộn đáy, gửi tin nhắn.
+   - `MessageAdapter.java`: Adapter hiển thị bong bóng tin nhắn gửi (bên phải, màu xanh) và tin nhắn nhận (bên trái, màu trắng).
+
+----------------------------------------------------------------------------------------------------
+V. LƯU Ý KỸ THUẬT QUAN TRỌNG KHI VIBE CODE TIẾP
+
+1. Về Chữ Ký Số Ed25519 trong `RatchetManager.java`:
+   - Bouncy Castle trên Android khi lấy `ed25519PrivateKey.getEncoded()` trả về PKCS#8 DER có độ dài 83 bytes (chứa public key ở 32 bytes cuối, seed ở offset 16..48).
+   - Cần đảm bảo truyền đúng Public Key Ed25519 của đối phương (`peerEd25519PublicKeyBase64` từ document `friends`). Tuyệt đối không nhầm với `publicKeyX25519`.
+   - Dữ liệu xác thực chữ ký: `buildDataToAuthenticate(ciphertext, iv, keyIndex)` phải đồng nhất hoàn toàn giữa bên gửi và bên nhận.
+
+2. Về Luồng Khởi Tạo Shared Secret ECDH:
+   - Khi A gửi lời mời và B chấp nhận: B gọi `performKeyExchange` tính được `shared_key_{A}`.
+   - Cần đảm bảo máy của A cũng tự động tính `shared_key_{B}` khi mở chat hoặc khi nhận trạng thái kết bạn thành công.
+
+----------------------------------------------------------------------------------------------------
+VI. CÁC HẠNG MỤC CẦN LÀM TIẾP THEO (NEXT ROADMAP TASKS)
+
+1. Hoàn thiện Danh sách Cuộc trò chuyện ở Trang chủ (`ChungActivity`):
+   - Tạo `ConversationAdapter.java` gắn với `rvChatList` (layout `item_chung.xml`).
+   - Lắng nghe danh sách cuộc trò chuyện gần nhất từ `ConversationDao` (Room DB) hiển thị tên bạn bè, tin nhắn cuối, thời gian, số tin chưa đọc.
+
+2. Giai đoạn 5: Chat Nhóm Bảo Mật (Group E2EE - Sender Key Protocol):
+   - Tạo `SenderKeyManager.java`: Quản lý Sender Key (ChainKey + SigningKey Ed25519).
+   - Tạo Model `SenderKeyDistributionMessage.java` & `Group.java`.
+   - Tạo Entity & Dao Room: `GroupSenderKeyEntity.java`, `GroupSenderKeyDao.java`.
+   - Tạo `GroupRepository.java`: Phân phối khóa nhóm qua kênh mã hóa 1-1 cho các thành viên.
+   - Xây dựng màn hình Tạo nhóm: `CreateGroupActivity.java` (`create_group.xml`) & `SelectMemberAdapter.java`.
+   - Xây dựng màn hình Chat nhóm: `GroupChatActivity.java` (`chat_group.xml`) & `GroupChatViewModel.java`.
+
+3. Giai đoạn 6: Gửi Nhận Tệp Đa Phương Tiện Nhẹ (Media E2EE):
+   - Tạo `MediaCompressor.java` (nén ảnh WebP/JPEG < 300KB) & `FileHelper.java`.
+   - Quy trình mã hóa file: Tạo AES FileKey ngẫu nhiên -> Mã hóa nội dung file -> Upload lên Storage -> Mã hóa FileKey qua kênh E2EE gửi kèm tin nhắn.
+   - Xử lý mở/tải file đã giải mã trên thiết bị nhận.
+
+4. Giai đoạn 7: Đóng gói, Tối ưu & Cấu hình ProGuard:
+   - Cấu hình `proguard-rules.pro` giữ lại các class DTO/Models của Firebase và các thuật toán Bouncy Castle.
+====================================================================================================

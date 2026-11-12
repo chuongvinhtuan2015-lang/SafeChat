@@ -1,0 +1,17 @@
+vòng đời màn hình
+
+Hành động của người dùng	Các hàm được gọi theo thứ tự
+Mở app lần đầu	onCreate() → onStart() → onResume()
+Bấm nút Home (Ẩn app)	onPause() → onStop()
+Mở lại app từ đa nhiệm	onRestart() → onStart() → onResume()
+Bấm nút Back (Thoát hẳn)	onPause() → onStop() → onDestroy()
+Xoay màn hình (Đổi cấu hình)	onPause() → onStop() → onDestroy() → onCreate() → onStart() → onResume()
+
+
+ChungActivity
+viewModel = new ViewModelProvider(this).get(ChungViewModel.class); 
+ViewModelProvider quản lý vòng đời, nếu có trả về, chưa có tạo mới
+
+RecyclerView là nâng cấp so với listview, bắt buộc kết thừa ViewHolder, chỉ tạo đủ view hiện trên màn hình, có các cơ chế cập nhật giúp không vẽ lại từ đầu
+
+Khi vào Profile cập nhật ảnh và tên thì hàm onResume gọi về Viewmodel, sự kiện setvalue sẽ báo về 

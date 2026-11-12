@@ -1,0 +1,107 @@
+app/
+├── src/
+│   ├── main/
+│   │   ├── java/com/example/safechat/
+│   │   │   ├── SafeChatApplication.java                         // Khởi tạo BouncyCastle Security Provider, App Context
+│   │   │   │
+│   │   │   ├── crypto/                                          // [HỆ THỐNG MẬT MÃ CỐT LÕI & GIAO THỨC E2EE]
+│   │   │   │   ├── CryptoManager.java                           // X25519 (ECDH), Ed25519 (chữ ký), PBKDF2 (100k vòng), AES-256-GCM đóng/mở KeyBundle
+│   │   │   │   ├── RatchetManager.java                          // KDF Chain Ratchet (HMAC-SHA256) xoay khóa liên tục, mã hóa/giải mã tin nhắn 1-1, ký Ed25519
+│   │   │   │   └── models/                                      // Cấu trúc dữ liệu gói tin mật mã
+│   │   │   │       ├── KeyBundle.java                           // Gói khóa nhị phân đã mã hóa [Salt (16B) + IV (12B) + Ciphertext + Tag (16B)]
+│   │   │   │       └── EncryptedMessagePayload.java             // Gói tin truyền mạng: ciphertext, iv, signature, keyIndex, senderId, receiverId, timestamp
+│   │   │   │
+│   │   │   ├── data/                                            // [TẦNG DỮ LIỆU: LOCAL DB, PREFS, REMOTE & REPOSITORY]
+│   │   │   │   ├── local/
+│   │   │   │   │   ├── prefs/
+│   │   │   │   │   │   └── LocalDataManager.java                // Quản lý EncryptedSharedPreferences (lưu session, Private Keys, ECDH Shared Keys)
+│   │   │   │   │   └── db/                                      // Room Database (Lưu trữ tin nhắn và hội thoại đã giải mã offline)
+│   │   │   │   │       ├── AppDatabase.java                     // Cấu hình Room Database (Version 1: messages, conversations, ratchet_sessions)
+│   │   │   │   │       ├── dao/
+│   │   │   │   │       │   ├── ConversationDao.java             // Thao tác bảng danh sách cuộc trò chuyện, tin nhắn cuối, đếm chưa đọc
+│   │   │   │   │       │   ├── MessageDao.java                  // Thao tác lưu, đọc danh sách tin nhắn theo hội thoại (LiveData)
+│   │   │   │   │       │   └── RatchetSessionDao.java           // Lưu/cập nhật trạng thái chuỗi khóa xoay (Chain Keys) 1-1
+│   │   │   │   │       └── entities/
+│   │   │   │   │           ├── ConversationEntity.java          // Entity bảng conversations (partnerId, lastMessage, timestamp, unreadCount...)
+│   │   │   │   │           ├── MessageEntity.java               // Entity bảng messages (messageId, senderId, receiverId, messageText, status...)
+│   │   │   │   │           └── RatchetSessionEntity.java        // Entity bảng ratchet_sessions (conversationId, sendChainKey, recvChainKey, keyIndex)
+│   │   │   │   │
+│   │   │   │   ├── models/                                      // Data Models trao đổi dữ liệu
+│   │   │   │   │   ├── User.java                                // Model người dùng trên Firestore (uid, fullName, email, public keys, keyBundle, fcmToken)
+│   │   │   │   │   ├── Friend.java                              // Model bạn bè trong subcollection users/{uid}/friends
+│   │   │   │   │   └── FriendRequest.java                       // Model lời mời kết bạn (senderId, receiverId, status: PENDING/ACCEPTED/DECLINED)
+│   │   │   │   │
+│   │   │   │   ├── remote/                                      // Tương tác trực tiếp với Firebase APIs
+│   │   │   │   │   ├── FirebaseAuthSource.java                  // Đăng ký, đăng nhập email/mật khẩu, đăng xuất, lấy UID
+│   │   │   │   │   ├── FirestoreDataSource.java                 // CRUD & Realtime Listener: users, chats, messages, tìm user theo email
+│   │   │   │   │   ├── FriendRemoteDataSource.java              // Thao tác subcollection friends, lắng nghe danh sách bạn bè realtime
+│   │   │   │   │   └── FcmNotificationService.java              // Dịch vụ Firebase Cloud Messaging nhận push notification và cập nhật FCM Token
+│   │   │   │   │
+│   │   │   │   └── repository/                                  // [TẦNG REPOSITORY - Điều phối luồng dữ liệu MVVM]
+│   │   │   │       ├── AuthRepository.java                      // Xác thực Zero-Knowledge: Đăng ký (sinh khóa, đóng gói AES-GCM), Đăng nhập (giải mã nạp khóa)
+│   │   │   │       ├── ChatRepository.java                      // Điều phối xoay khóa Ratchet, mã hóa gửi tin, giải mã nhận tin Firestore -> Room
+│   │   │   │       ├── FriendRepository.java                    // Tìm user, gửi/nhận kết bạn, thực hiện trao đổi khóa ECDH đôi bên, xóa bạn
+│   │   │   │       └── ProfileRepository.java                   // Cập nhật họ tên, avatar (UCrop nén Base64), đổi mật khẩu, đăng xuất xóa khóa
+│   │   │   │
+│   │   │   ├── ui/                                              // [TẦNG GIAO DIỆN & VIEWMODEL THEO MÀN HÌNH]
+│   │   │   │   ├── splash/
+│   │   │   │   │   └── ChoActivity.java                         // Màn hình chờ: kiểm tra trạng thái login & private keys để điều hướng
+│   │   │   │   ├── auth/
+│   │   │   │   │   ├── DangNhapActivity.java                    // Giao diện Đăng nhập (Email, Mật khẩu, Recovery Code)
+│   │   │   │   │   ├── DangNhapViewModel.java                   // Xử lý đăng nhập Firebase + giải mã KeyBundle nạp Private Keys vào máy
+│   │   │   │   │   ├── DangKyActivity.java                      // Giao diện Đăng ký (Họ tên, Email, Mật khẩu, Recovery Code)
+│   │   │   │   │   ├── DangKyViewModel.java                     // Sinh cặp khóa, mã hóa Private Keys bằng PBKDF2 + AES-GCM, đẩy Firestore
+│   │   │   │   │   └── ForgotPasswordActivity.java              // Giao diện gửi email khôi phục mật khẩu qua Firebase Auth
+│   │   │   │   ├── home/
+│   │   │   │   │   ├── ChungActivity.java                       // Màn hình chính: danh sách chat gần đây, ô tìm kiếm cuộc trò chuyện, thanh điều hướng
+│   │   │   │   │   ├── ChungViewModel.java                      // Quản lý LiveData cuộc trò chuyện từ Room, cập nhật tên/avatar, tự động kích hoạt đồng bộ
+│   │   │   │   │   └── ConversationAdapter.java                 // Adapter hiển thị danh sách hội thoại gần nhất
+│   │   │   │   ├── friends/
+│   │   │   │   │   ├── FriendsActivity.java                     // Màn hình Danh sách bạn bè, hộp thoại tìm & kết bạn, xử lý lời mời, chat nhanh
+│   │   │   │   │   ├── FriendsViewModel.java                    // Tìm kiếm bạn theo email, gửi lời mời, chấp nhận (ECDH), từ chối, xóa bạn
+│   │   │   │   │   └── FriendAdapter.java                       // Adapter danh sách bạn bè (nút Chat, nút Xóa bạn)
+│   │   │   │   ├── chat/
+│   │   │   │   │   ├── ChatActivity.java                        // Màn hình Chat 1-1: giao diện tin nhắn, nhập gửi tin, hiển thị trạng thái
+│   │   │   │   │   ├── ChatViewModel.java                       // Kết nối LiveData Room DB, kích hoạt Ratchet mã hóa/giải mã realtime
+│   │   │   │   │   └── MessageAdapter.java                      // Adapter hiển thị tin nhắn E2EE (tin đi bên phải màu xanh, tin đến bên trái màu xám)
+│   │   │   │   └── profile/
+│   │   │   │       ├── ProfileActivity.java                     // Màn hình Thông tin cá nhân: xem/sửa tên, cắt/nén ảnh Base64 đại diện, đổi mật khẩu, đồng bộ bạn bè, đăng xuất
+│   │   │   │       └── ProfileViewModel.java                    // Quản lý dữ liệu trang cá nhân, đồng bộ lại danh sách bạn từ Remote, xóa sạch khóa khi đăng xuất
+│   │   │   │
+│   │   │   └── utils/                                           // [CÁC TIỆN ÍCH DÙNG CHUNG]
+│   │   │       ├── Constants.java                               // Định nghĩa các hằng số Firestore collection, key SharedPreferences
+│   │   │       └── AvatarHelper.java                            // Tiện ích giải mã Base64 sang ảnh tròn (RoundedDrawable) hoặc tạo avatar chữ cái theo màu
+│   │   │
+│   │   └── res/                                                 // Tài nguyên giao diện (Layouts XML, Drawables, Mipmaps, Values)
+│   │       ├── layout/
+│   │       │   ├── cho.xml                                      // Layout màn hình chờ (Splash)
+│   │       │   ├── dangnhap.xml                                 // Layout Đăng nhập
+│   │       │   ├── dangky.xml                                   // Layout Đăng ký
+│   │       │   ├── forgot_password.xml                          // Layout Quên mật khẩu
+│   │       │   ├── chung.xml                                    // Layout Màn hình chính
+│   │       │   ├── item_chung.xml                               // Layout Item một cuộc trò chuyện ở trang chính
+│   │       │   ├── friends.xml                                  // Layout Màn hình Danh sách bạn bè & Lời mời
+│   │       │   ├── item_friend.xml                              // Layout Item hiển thị 1 người bạn
+│   │       │   ├── dialog_add_friend.xml                        // Layout Hộp thoại nhập email tìm và kết bạn
+│   │       │   ├── chat.xml                                     // Layout Màn hình Nhắn tin 1-1 E2EE
+│   │       │   ├── item_message_sent.xml                        // Layout Bong bóng tin nhắn gửi đi (bên phải)
+│   │       │   ├── item_message_received.xml                    // Layout Bong bóng tin nhắn nhận về (bên trái)
+│   │       │   └── profile.xml                                  // Layout Màn hình Trang cá nhân & Đổi mật khẩu
+│   │       └── values/                                          // strings.xml, colors.xml, themes.xml
+│   │
+│   └── test/java/com/example/safechat/                          // [UNIT TEST]
+│       ├── CryptoTest.java                                      // Kiểm thử tự động hệ thống mật mã E2EE (X25519 ECDH, Ed25519, Ratchet KDF, AES-GCM)
+│       └── ExampleUnitTest.java                                 // Kiểm thử mẫu
+│
+├── functions/                                                   // [BACKEND NODE.JS CLOUD FUNCTIONS / SERVER SERVICE]
+│   ├── index.js                                                 // Server Node.js lắng nghe collectionGroup("messages") trên Firestore để bắn FCM Push Notification đến người nhận
+│   ├── package.json                                             // Cấu hình dependencies (firebase-admin)
+│   └── service-account.json                                     // Khóa dịch vụ Firebase Admin SDK
+│
+├── build.gradle.kts                                             // Cấu hình Build Gradle cấp Root
+├── settings.gradle.kts                                          // Cấu hình Modules & Plugin Repositories
+├── firebase.json                                                // Cấu hình dịch vụ Firebase Deploy
+├── tomtat.txt                                                   // Tài liệu tóm tắt dự án & tiến độ hoàn thành
+├── giaithich.txt                                                // Ghi chú vòng đời Activity và cơ chế ViewModel/RecyclerView
+├── giaithichtatcaluongcuaapp.txt                                // Tài liệu phân tích & giải thích toàn bộ luồng hoạt động của SafeChat
+└── cau truc.txt                                                 // Cây thư mục và cấu trúc chi tiết toàn bộ dự án

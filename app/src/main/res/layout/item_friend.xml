@@ -1,0 +1,169 @@
+<?xml version="1.0" encoding="utf-8"?>
+<androidx.constraintlayout.widget.ConstraintLayout
+    xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    xmlns:tools="http://schemas.android.com/tools"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:background="?attr/selectableItemBackground"
+    android:clickable="true"
+    android:focusable="true"
+    android:paddingHorizontal="20dp"
+    android:paddingVertical="12dp">
+
+    <!-- Avatar tròn bo góc 24dp (đường kính 48dp) -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/cardAvatar"
+        android:layout_width="48dp"
+        android:layout_height="48dp"
+        app:cardBackgroundColor="#EDE9FE"
+        app:cardCornerRadius="24dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toTopOf="@id/dividerLine"
+        app:layout_constraintStart_toStartOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Ký tự đại diện khi chưa có ảnh -->
+        <TextView
+            android:id="@+id/tvAvatarChar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:text="H"
+            android:textColor="#7C3AED"
+            android:textSize="16sp"
+            android:textStyle="bold" />
+
+        <!-- Ảnh đại diện thật tải qua Glide -->
+        <ImageView
+            android:id="@+id/imgFriendAvatar"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:scaleType="centerCrop"
+            android:visibility="gone"
+            tools:ignore="ContentDescription" />
+
+    </com.google.android.material.card.MaterialCardView>
+
+    <!-- Tên bạn bè -->
+    <TextView
+        android:id="@+id/tvFriendName"
+        android:layout_width="0dp"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="14dp"
+        android:layout_marginEnd="12dp"
+        android:ellipsize="end"
+        android:maxLines="1"
+        android:text="Hoàng"
+        android:textColor="#0F172A"
+        android:textSize="16sp"
+        android:textStyle="bold"
+        app:layout_constraintBottom_toTopOf="@id/dividerLine"
+        app:layout_constraintEnd_toStartOf="@id/barrierActions"
+        app:layout_constraintStart_toEndOf="@id/cardAvatar"
+        app:layout_constraintTop_toTopOf="parent" />
+
+    <!-- CỤM NÚT KHI ĐANG LÀ BẠN (Chặn & Xóa) -->
+    <LinearLayout
+        android:id="@+id/layoutFriendActions"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        app:layout_constraintBottom_toTopOf="@id/dividerLine"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <!-- Nút Chặn bạn -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/btnBlockFriend"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:layout_marginEnd="8dp"
+            android:clickable="true"
+            android:contentDescription="Chặn bạn"
+            android:focusable="true"
+            app:cardBackgroundColor="#334155"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_block"
+                app:tint="#FFFFFF" />
+        </com.google.android.material.card.MaterialCardView>
+
+        <!-- Nút Xóa bạn -->
+        <com.google.android.material.card.MaterialCardView
+            android:id="@+id/btnDeleteFriend"
+            android:layout_width="40dp"
+            android:layout_height="40dp"
+            android:clickable="true"
+            android:contentDescription="Xóa bạn"
+            android:focusable="true"
+            app:cardBackgroundColor="#DC2626"
+            app:cardCornerRadius="12dp"
+            app:cardElevation="0dp"
+            app:strokeWidth="0dp">
+
+            <ImageView
+                android:layout_width="18dp"
+                android:layout_height="18dp"
+                android:layout_gravity="center"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_delete"
+                app:tint="#FFFFFF" />
+        </com.google.android.material.card.MaterialCardView>
+    </LinearLayout>
+
+    <!-- NÚT KHI ĐÃ BỊ CHẶN (Bỏ chặn) - Mặc định ẩn -->
+    <com.google.android.material.card.MaterialCardView
+        android:id="@+id/btnUnblock"
+        android:layout_width="wrap_content"
+        android:layout_height="36dp"
+        android:clickable="true"
+        android:contentDescription="Bỏ chặn"
+        android:focusable="true"
+        android:visibility="gone"
+        app:cardBackgroundColor="#CBD5E1"
+        app:cardCornerRadius="10dp"
+        app:cardElevation="0dp"
+        app:strokeWidth="0dp"
+        app:layout_constraintBottom_toTopOf="@id/dividerLine"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintTop_toTopOf="parent">
+
+        <TextView
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:paddingHorizontal="14dp"
+            android:text="Bỏ chặn"
+            android:textColor="#475569"
+            android:textSize="13sp"
+            android:textStyle="bold" />
+    </com.google.android.material.card.MaterialCardView>
+
+    <androidx.constraintlayout.widget.Barrier
+        android:id="@+id/barrierActions"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        app:barrierDirection="start"
+        app:constraint_referenced_ids="layoutFriendActions,btnUnblock" />
+
+    <View
+        android:id="@+id/dividerLine"
+        android:layout_width="0dp"
+        android:layout_height="1dp"
+        android:layout_marginTop="14dp"
+        android:background="#F1F5F9"
+        app:layout_constraintBottom_toBottomOf="parent"
+        app:layout_constraintEnd_toEndOf="parent"
+        app:layout_constraintStart_toStartOf="@id/cardAvatar" />
+
+</androidx.constraintlayout.widget.ConstraintLayout>
